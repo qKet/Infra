@@ -1,0 +1,58 @@
+# =========================================================
+# release Backend Deployment
+# =========================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qket-backend
+  namespace: qket-release
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qket-backend
+  template:
+    metadata:
+      labels:
+        app: qket-backend
+    spec:
+      # S3 업로드용 IRSA — Terraform(module.storage_release)이 만든 서비스어카운트.
+      # 이걸로 뜨면 S3Client가 고정 키 없이 자동으로 이 역할의 임시 자격증명을 씀.
+      serviceAccountName: qket-backend
+      containers:
+        - name: qket-backend
+          # GitHub Actions에서 sed 로 치환
+          image: BACKEND_IMAGE
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - configMapRef:
+                name: storage-config
+            - secretRef:
+                name: db-secrets
+            - secretRef:
+                name: redis-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qket-backend-service
+  namespace: qket-release
+spec:
+  type: ClusterIP
+  selector:
+    app: qket-backend
+  ports:
+    - port: 80
+      targetPort: 8080

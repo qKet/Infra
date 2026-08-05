@@ -1,0 +1,49 @@
+# =========================================================
+# release Frontend Deployment
+# =========================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qket-frontend
+  namespace: qket-release
+spec:
+  revisionHistoryLimit: 2
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qket-frontend
+  template:
+    metadata:
+      labels:
+        app: qket-frontend
+    spec:
+      containers:
+        - name: qket-frontend
+          image: FRONTEND_IMAGE
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "256Mi"
+            requests:
+              cpu: "0.25"
+              memory: "128Mi"
+          # env:
+          #   - name: BACKEND_URL
+          #     value: "http://qket-backend-service/api"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qket-frontend-service
+  namespace: qket-release
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 3000
+  selector:
+    app: qket-frontend

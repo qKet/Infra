@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: qket-backend
+  namespace: monitoring
+  labels:
+    release: monitoring
+
+spec:
+  namespaceSelector:
+    matchNames:
+      - qket-prod
+
+  selector:
+    matchLabels:
+      app: qket-backend
+
+  endpoints:
+    - port: http
+      path: /api/actuator/prometheus
+      interval: 15s

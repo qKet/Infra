@@ -1,0 +1,28 @@
+############################
+# networkpolicy_qKet.yaml  #
+# namespace: qket-prod      #
+############################
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-allow-same-namespace
+  namespace: qket-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: qket-backend
+  policyTypes:
+    - Ingress
+  ingress:
+  - from:
+      - namespaceSelector:
+          matchLabels:
+            name: qket-prod
+
+      - namespaceSelector:
+          matchLabels:
+            name: monitoring
+
+    ports:
+      - port: 8080

@@ -1,0 +1,74 @@
+# =========================================================
+# prod Backend Deployment, service
+# =========================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qket-backend
+  namespace: qket-prod
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: qket-backend
+  template:
+    metadata:
+      labels:
+        app: qket-backend
+    spec:
+      containers:
+        - name: qket-backend
+          # GitHub Actions에서 가져온 값
+          # sed -i "s|BACKEND_IMAGE|$REGISTRY/$REPOSITORY:$IMAGE_TAG|g"
+          image: BACKEND_IMAGE
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /api/actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 6
+          envFrom:
+            - configMapRef:
+                name: app-config # env_qKet.yaml의 ConfigMap
+            - secretRef:
+                name: db-secrets # env_qKet.yaml의 DB Secret
+            - secretRef:
+                name: redis-secrets # env_qKet.yaml의 Redis Secret
+            - secretRef:
+                name: aws-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qket-backend-service
+  namespace: qket-prod
+  labels:
+    app: qket-backend
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: qket-backend
+
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

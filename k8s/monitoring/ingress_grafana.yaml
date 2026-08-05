@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-alb-ingress
+  namespace: monitoring
+
+  annotations:
+    # 기존 app.jun979.click과 같은 ALB 사용
+    alb.ingress.kubernetes.io/group.name: qket
+    alb.ingress.kubernetes.io/load-balancer-name: team5-qket-alb
+    alb.ingress.kubernetes.io/tags: Team=team5,Project=qket
+
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+
+    # 본인의 ACM 인증서 ARN으로 변경
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:727646470302:certificate/a9789e71-7453-43d9-b0db-ad2ac973f4c0
+
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+
+    # Grafana 상태 확인 주소
+    alb.ingress.kubernetes.io/healthcheck-path: /api/health
+    alb.ingress.kubernetes.io/healthcheck-port: traffic-port
+    alb.ingress.kubernetes.io/success-codes: "200"
+
+spec:
+  ingressClassName: alb
+
+  rules:
+    - host: grafana.jun979.click
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-grafana
+                port:
+                  number: 80

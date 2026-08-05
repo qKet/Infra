@@ -1,0 +1,43 @@
+############################
+# ingress_https_qket.yaml  #
+# namespace: qket-release       #
+############################
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-alb-ingress
+  namespace: qket-release
+  annotations:
+    alb.ingress.kubernetes.io/group.name: qket
+    alb.ingress.kubernetes.io/tags: Team=team5,Project=qket
+    alb.ingress.kubernetes.io/load-balancer-name: team5-qket-alb
+
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:727646470302:certificate/5e9cef50-c07b-4988-8317-88a1c5fa8e1c # ACM 인증서 ARN
+
+    # 80으로 받은 포트 443으로 리다이렉션
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+
+    # AWS 콘솔 보안그룹 > 직접 수동으로 인바운드 규칙 설정 하거나 아랫쪽 코드 사용
+    # DEV 허용할 IP로 변경 (본인 IP/32)
+    # alb.ingress.kubernetes.io/inbound-cidrs: "내IP/32"
+
+spec:
+  ingressClassName: alb
+  rules:
+    - host: dev.jun979.click # dev 쪽 Route53 추가 필요
+      http:
+        paths:
+          # alb -> frontend(next.js) -> backend(spring boot) 로 가기때문에
+          # backend service 불필요
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: qket-frontend-service
+                port:
+                  number: 80
