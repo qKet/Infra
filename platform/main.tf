@@ -155,13 +155,18 @@ module "github_actions_oidc" {
   project_name       = var.project_name
   ecr_repository_arn = module.ecr.repository_arn
 
+  # qKet 조직의 불변 ID. `curl https://api.github.com/repos/qKet/backend`의 .owner.id로 확인.
+  github_owner_id = "313320752"
+
   repos = {
     backend = {
       repo             = "qKet/backend"
+      repository_id    = "1323850932" # curl https://api.github.com/repos/qKet/backend 의 .id
       allowed_branches = ["release", "main"]
     }
     frontend = {
       repo             = "qKet/frontend"
+      repository_id    = "1323797216" # curl https://api.github.com/repos/qKet/frontend 의 .id
       allowed_branches = ["release", "main"]
     }
   }
