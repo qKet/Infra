@@ -1,8 +1,3 @@
-output "namespace" {
-  description = "생성된 쿠버네티스 네임스페이스 이름"
-  value       = kubernetes_namespace.this.metadata[0].name
-}
-
 output "rds_endpoint" {
   description = "RDS 엔드포인트 (DB_HOST)"
   value       = module.rds.rds_endpoint

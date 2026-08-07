@@ -36,7 +36,7 @@ provider "aws" {
     tags = {
       Project     = var.project_name
       Team        = var.team_tag
-      Environment = "shared" # vpc/subnet/eks는 release/prod가 공유하는 싱글턴이라 환경 구분이 없음
+      Environment = "shared"
     }
   }
 }
@@ -46,6 +46,8 @@ provider "aws" {
 # 뒷부분 리소스를 처리할 즈음엔 토큰(유효기간 ~15분)이 만료돼버림 — 실제로 겪었음.
 # exec 방식은 실제 API 호출하는 "그 순간"마다 aws eks get-token을 새로 실행해서 토큰을 받아오므로
 # apply가 아무리 오래 걸려도 만료 문제가 없음.
+# --role-arn 없이 plain 신원으로 인증하면 EKS Access Entry가 team5-qket-cluster-admin
+# role한테만 등록돼있어서 Unauthorized남 — 세 provider(kubernetes/helm/kubectl) 전부 이 role로 인증.
 provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
   cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority)
@@ -53,13 +55,11 @@ provider "kubernetes" {
   exec {
     api_version = "client.authentication.k8s.io/v1beta1"
     command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region, "--role-arn", module.eks.cluster_admin_role_arn]
   }
 }
 
 provider "helm" {
-  repository_config_path = "${path.module}/.helm/repositories.yaml"   # ← 이 줄 추가
-
   kubernetes {
     host                   = module.eks.cluster_endpoint
     cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority)
@@ -67,7 +67,7 @@ provider "helm" {
     exec {
       api_version = "client.authentication.k8s.io/v1beta1"
       command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region, "--role-arn", module.eks.cluster_admin_role_arn]
     }
   }
 }
@@ -82,6 +82,6 @@ provider "kubectl" {
   exec {
     api_version = "client.authentication.k8s.io/v1beta1"
     command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region, "--role-arn", module.eks.cluster_admin_role_arn]
   }
 }
