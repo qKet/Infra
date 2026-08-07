@@ -37,6 +37,7 @@ provider "kubernetes" {
   exec {
     api_version = "client.authentication.k8s.io/v1beta1"
     command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.platform.outputs.eks_cluster_name, "--region", var.aws_region]
+    # --role-arn 없이 plain 신원으로 인증하면 EKS Access Entry가 role한테만 등록돼있어서 Unauthorized남.
+    args = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.platform.outputs.eks_cluster_name, "--region", var.aws_region, "--role-arn", data.terraform_remote_state.platform.outputs.cluster_admin_role_arn]
   }
 }
