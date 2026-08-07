@@ -149,3 +149,8 @@ output "argocd_namespace" {
   description = "ArgoCD가 설치된 네임스페이스"
   value       = helm_release.argocd.namespace
 }
+
+output "github_actions_role_arns" {
+  description = "GitHub Actions CI가 assume할 role ARN — 각 레포 GitHub Secrets(AWS_GITHUB_ACTIONS_ROLE_ARN)에 등록"
+  value       = module.github_actions_oidc.role_arns
+}

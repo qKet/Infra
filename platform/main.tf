@@ -147,6 +147,26 @@ module "ecr" {
   repository_name = var.ecr_repository_name
 }
 
+# GitHub Actions가 고정 키 없이 OIDC로 AWS(ECR push)에 접근하기 위한 IAM.
+# backend/frontend 레포 각각 별도 role — 서로 다른 레포의 워크플로우가 남의 role을 못 씀.
+module "github_actions_oidc" {
+  source = "../modules/github-actions-oidc"
+
+  project_name       = var.project_name
+  ecr_repository_arn = module.ecr.repository_arn
+
+  repos = {
+    backend = {
+      repo             = "qKet/backend"
+      allowed_branches = ["release", "main"]
+    }
+    frontend = {
+      repo             = "qKet/frontend"
+      allowed_branches = ["release", "main"]
+    }
+  }
+}
+
 # ArgoCD - 예외로 Terraform이 직접 관리
 resource "helm_release" "argocd" {
   name             = "argocd"
