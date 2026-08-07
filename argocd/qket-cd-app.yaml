@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: qket-cd
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/qKet/CD.git
+    targetRevision: main
+    path: release
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: qket-release
+  syncPolicy: { }
