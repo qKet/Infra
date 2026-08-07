@@ -169,3 +169,49 @@ resource "kubernetes_config_map" "app_config" {
     AWS_REGION = var.aws_region
   }
 }
+
+# 백엔드 파드로 들어오는 트래픽을 제한. 원래 kubernetes/release|prod/networkpolicy_qKet*.yaml로
+# 수동 관리했는데, namespace(kubernetes_namespace.this)와 마찬가지로 Terraform이 직접 관리하도록 이전.
+resource "kubernetes_network_policy" "backend_allow_same_namespace" {
+  metadata {
+    name      = "backend-allow-same-namespace"
+    namespace = kubernetes_namespace.this.metadata[0].name
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        app = "qket-backend"
+      }
+    }
+
+    policy_types = ["Ingress"]
+
+    ingress {
+      # 같은 환경 네임스페이스는 항상 허용
+      from {
+        namespace_selector {
+          match_labels = {
+            name = kubernetes_namespace.this.metadata[0].name
+          }
+        }
+      }
+
+      # prod에서만 monitoring 네임스페이스(Prometheus 스크래핑)도 추가로 허용
+      dynamic "from" {
+        for_each = local.environment == "prod" ? [1] : []
+        content {
+          namespace_selector {
+            match_labels = {
+              name = "monitoring"
+            }
+          }
+        }
+      }
+
+      ports {
+        port = "8080"
+      }
+    }
+  }
+}

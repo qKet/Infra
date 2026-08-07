@@ -58,6 +58,8 @@ provider "kubernetes" {
 }
 
 provider "helm" {
+  repository_config_path = "${path.module}/.helm/repositories.yaml"   # ← 이 줄 추가
+
   kubernetes {
     host                   = module.eks.cluster_endpoint
     cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority)

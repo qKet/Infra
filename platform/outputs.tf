@@ -144,3 +144,8 @@ output "ecr_repository_arn" {
   description = "ECR 저장소 ARN"
   value       = module.ecr.repository_arn
 }
+
+output "argocd_namespace" {
+  description = "ArgoCD가 설치된 네임스페이스"
+  value       = helm_release.argocd.namespace
+}

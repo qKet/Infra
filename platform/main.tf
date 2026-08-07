@@ -146,3 +146,12 @@ module "ecr" {
 
   repository_name = var.ecr_repository_name
 }
+
+# ArgoCD - 예외로 Terraform이 직접 관리
+resource "helm_release" "argocd" {
+  name             = "argocd"
+  repository       = "https://argoproj.github.io/argo-helm"
+  chart            = "argo-cd"
+  namespace        = "argocd"
+  create_namespace = true
+}
