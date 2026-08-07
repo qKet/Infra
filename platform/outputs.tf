@@ -103,6 +103,16 @@ output "oidc_provider_url" {
   value       = module.eks.oidc_provider_url
 }
 
+output "cluster_admin_role_arn" {
+  description = "클러스터 admin 접근용 공유 IAM Role ARN"
+  value       = module.eks.cluster_admin_role_arn
+}
+
+output "cluster_admins_group_name" {
+  description = "이 IAM 그룹에 팀원을 추가하면 클러스터 admin 접근 가능 (콘솔/CLI에서 직접, terraform 안 건드림)"
+  value       = module.eks.cluster_admins_group_name
+}
+
 # module.alb_controller를 backup/modules/alb-controller, backup/platform/alb-controller.tf로 이동 (helm 설치 여부 보류).
 # 재활성화 시 이 output도 같이 복구할 것.
 # output "alb_controller_role_arn" {

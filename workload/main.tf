@@ -47,14 +47,14 @@ locals {
 
 # EKS namespace 생성 
 # (release workspace → qket-release, prod workspace → qket-prod).
-resource "kubernetes_namespace" "this" {
-  metadata {
-    name = "qket-${local.environment}"
-    labels = {
-      name = "qket-${local.environment}"
-    }
-  }
-}
+# resource "kubernetes_namespace" "this" {
+#   metadata {
+#     name = "qket-${local.environment}"
+#     labels = {
+#       name = "qket-${local.environment}"
+#     }
+#   }
+# }
 
 # rds/redis 보안그룹 — EKS 노드/파드, SSM bastion에서만 각자 포트로 접속 허용.
 # environment(workspace)별로 별도 그룹이 생김 (이름에 local.environment가 들어감).

@@ -11,6 +11,13 @@ resource "aws_eks_cluster" "this" {
     endpoint_private_access = true
   }
 
+  # CONFIG_MAP(레거시, aws-auth 수동 편집)만 쓰면 클러스터 재생성될 때마다 접근 권한이
+  # 같이 날아감 — API_AND_CONFIG_MAP으로 Access Entry(access.tf)를 같이 쓸 수 있게 함.
+  access_config {
+    authentication_mode                         = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin_permissions = true
+  }
+
   depends_on = [aws_iam_role_policy_attachment.eks_cluster]
 }
 

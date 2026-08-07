@@ -4,10 +4,3 @@ metadata:
   name: qket-prod
   labels:
     name: qket-prod # NetworkPolicy namespaceSelectr
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: qket-release
-  labels:
-    name: qket-release

@@ -47,3 +47,13 @@ output "node_role_arn" {
   description = "워커 노드 IAM 역할 ARN"
   value       = aws_iam_role.eks_node.arn
 }
+
+output "cluster_admin_role_arn" {
+  description = "클러스터 admin 접근용 공유 IAM Role ARN — kubectl에서 이 role을 assume해서 접속"
+  value       = aws_iam_role.cluster_admin.arn
+}
+
+output "cluster_admins_group_name" {
+  description = "이 그룹에 팀원을 추가하면 위 role을 assume할 수 있게 됨 (IAM 콘솔/CLI에서, terraform 안 건드림)"
+  value       = aws_iam_group.cluster_admins.name
+}
