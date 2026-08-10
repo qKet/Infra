@@ -4,7 +4,7 @@ resource "aws_s3_bucket" "posters" {
   bucket = "${var.project_name}-posters-${var.environment}"
 
   # release는 자주 destroy/재생성하는 샌드박스라, 안에 업로드된 파일이 있어도(비어있지 않아도)
-  # 삭제가 막히지 않게 함. prod는 워크스페이스별 기본값(workload/config.tf)에서 false로 실수 삭제 방지.
+  # 삭제가 막히지 않게 함. prod는 워크스페이스별 기본값(04_data/main.tf의 env_config_map)에서 false로 실수 삭제 방지.
   force_destroy = var.force_destroy
 }
 

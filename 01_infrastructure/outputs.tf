@@ -28,6 +28,11 @@ output "private_general_subnet_ids" {
   value       = module.subnet.private_general_subnet_ids
 }
 
+output "private_general_subnet_cidrs" {
+  description = "프라이빗(일반 워크로드) 서브넷 CIDR 목록 — data의 rds/redis SG가 infrastructure SG-ID 대신 이걸로 ingress를 검(infrastructure destroy/재생성에 data가 영향 안 받게)"
+  value       = module.subnet.private_general_subnet_cidrs
+}
+
 output "private_data_subnet_ids" {
   description = "프라이빗-데이터(DB/Redis) 서브넷 ID 목록"
   value       = module.subnet.private_data_subnet_ids
@@ -113,7 +118,7 @@ output "cluster_admins_group_name" {
   value       = module.eks.cluster_admins_group_name
 }
 
-# module.alb_controller를 backup/modules/alb-controller, backup/platform/alb-controller.tf로 이동 (helm 설치 여부 보류).
+# module.alb_controller를 backup/modules/alb-controller, backup/infrastructure/alb-controller.tf로 이동 (helm 설치 여부 보류).
 # 재활성화 시 이 output도 같이 복구할 것.
 # output "alb_controller_role_arn" {
 #   description = "ALB Controller IRSA IAM 역할 ARN"
@@ -126,11 +131,6 @@ output "ssm_bastion_instance_id" {
 }
 
 output "bastion_security_group_id" {
-  description = "bastion 보안그룹 ID — workload root의 RDS/Redis 보안그룹에서 참조"
+  description = "bastion 보안그룹 ID — data root의 RDS/Redis 보안그룹에서 참조"
   value       = module.security_group.security_group_ids["bastion"]
-}
-
-output "argocd_namespace" {
-  description = "ArgoCD가 설치된 네임스페이스"
-  value       = helm_release.argocd.namespace
 }

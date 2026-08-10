@@ -101,7 +101,7 @@ resource "aws_route_table_association" "private_data" {
   route_table_id = aws_route_table.private_data.id
 }
 
-# bastion 보안그룹만 여기서 생성 (rds/redis 보안그룹은 workload root에서 환경별로 생성).
+# bastion 보안그룹만 여기서 생성 (rds/redis 보안그룹은 data root에서 환경별로 생성).
 # 인바운드 규칙 없음 — SSM은 인스턴스가 AWS로 나가는 방향으로만 연결하므로 열 포트가 없음.
 module "security_group" {
   source = "../modules/security_group"
@@ -138,13 +138,4 @@ module "ec2" {
   subnet_id             = module.subnet.private_general_subnet_ids[0]
   security_group_id     = module.security_group.security_group_ids["bastion"]
   bastion_instance_type = var.bastion_instance_type
-}
-
-# ArgoCD - 예외로 Terraform이 직접 관리
-resource "helm_release" "argocd" {
-  name             = "argocd"
-  repository       = "https://argoproj.github.io/argo-helm"
-  chart            = "argo-cd"
-  namespace        = "argocd"
-  create_namespace = true
 }

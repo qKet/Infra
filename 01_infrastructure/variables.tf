@@ -49,7 +49,7 @@ variable "private_subnet_cidrs" {
 variable "eks_version" {
   description = "EKS 클러스터 쿠버네티스 버전"
   type        = string
-  default     = "1.34" # 추후에 1.36으로 버전업 예정
+  default     = "1.35" # 추후에 1.36으로 버전업 예정
 }
 
 variable "node_instance_types" {

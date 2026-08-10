@@ -34,7 +34,7 @@ resource "aws_db_instance" "this" {
   backup_retention_period = 7
   # release는 자주 destroy/재생성하는 샌드박스라 삭제할 때마다 최종 스냅샷 만들면
   # 이름 충돌로 삭제 자체가 막힘 — 그래서 스냅샷 안 만들고 그냥 삭제되게 함.
-  # prod는 워크스페이스별 기본값(workload/variables.tf)에서 false로 안전망을 켬.
+  # prod는 워크스페이스별 기본값(04_data/main.tf의 env_config_map)에서 false로 안전망을 켬.
   skip_final_snapshot = var.skip_final_snapshot
   deletion_protection = var.deletion_protection
 }
