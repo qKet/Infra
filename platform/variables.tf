@@ -84,12 +84,3 @@ variable "bastion_instance_type" {
   type        = string
   default     = "t3.micro"
 }
-
-/*******************
-*     ECR
-*******************/
-variable "ecr_repository_name" {
-  description = "backend/frontend 이미지를 담는 ECR 저장소 이름 — 기존 CI/IAM 정책과 이름을 맞춤"
-  type        = string
-  default     = "team5/ecr/qket"
-}
