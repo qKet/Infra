@@ -134,26 +134,3 @@ output "bastion_security_group_id" {
   description = "bastion 보안그룹 ID — data root의 RDS/Redis 보안그룹에서 참조"
   value       = module.security_group.security_group_ids["bastion"]
 }
-
-output "ecr_repository_url" {
-  description = "ECR 저장소 URI (CI가 docker push할 대상)"
-  value       = module.ecr.repository_url
-}
-
-output "ecr_repository_name" {
-  description = "ECR 저장소 이름"
-  value       = module.ecr.repository_name
-}
-
-output "ecr_repository_arn" {
-  description = "ECR 저장소 ARN"
-  value       = module.ecr.repository_arn
-}
-
-# argocd_namespace output은 2026-08-10에 ../02_k8s-addon/outputs.tf로 옮김
-# (helm_release.argocd 리소스 자체가 그쪽으로 이전됐으므로).
-
-output "github_actions_role_arns" {
-  description = "GitHub Actions CI가 assume할 role ARN — 각 레포 GitHub Secrets(AWS_GITHUB_ACTIONS_ROLE_ARN)에 등록"
-  value       = module.github_actions_oidc.role_arns
-}

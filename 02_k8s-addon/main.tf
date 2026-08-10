@@ -24,7 +24,7 @@ resource "kubernetes_namespace" "qket" {
   }
 }
 
-# ArgoCD - 예외로 Terraform이 직접 관리
+# ArgoCD
 resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
