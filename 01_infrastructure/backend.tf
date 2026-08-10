@@ -4,7 +4,7 @@
 terraform {
   backend "s3" {
     bucket       = "team5-qket-tfstate-727646470302"
-    key          = "platform/terraform.tfstate"
+    key          = "infrastructure/terraform.tfstate"
     region       = "ap-northeast-2"
     encrypt      = true
     use_lockfile = true

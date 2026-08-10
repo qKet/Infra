@@ -45,63 +45,47 @@ locals {
   env_config = lookup(local.env_config_map, local.environment, local.env_config_map["release"])
 }
 
-# EKS namespace 생성 
-# (release workspace → qket-release, prod workspace → qket-prod).
-# resource "kubernetes_namespace" "this" {
-#   metadata {
-#     name = "qket-${local.environment}"
-#     labels = {
-#       name = "qket-${local.environment}"
-#     }
-#   }
-# }
+# EKS namespace(qket-release/qket-prod)는 여기서 안 만듦 — infrastructure가 한 번의 apply로 둘 다 미리 만들어둠
+# (data는 workspace라서 release/prod를 나눠서 두 번 apply해야 하는데, namespace는 이 root의 첫
+# apply 시점부터 이미 있어야(아래 kubernetes_config_map, module.storage) 해서 infrastructure 쪽이 맞음).
+# 자세한 이유는 01_infrastructure/main.tf의 kubernetes_namespace.qket 주석 참고.
 
 # rds/redis 보안그룹 — EKS 노드/파드, SSM bastion에서만 각자 포트로 접속 허용.
 # environment(workspace)별로 별도 그룹이 생김 (이름에 local.environment가 들어감).
+#
+# infrastructure의 SG ID(security_groups)를 직접 참조하지 않고 infrastructure의 "일반 워크로드 서브넷 CIDR"
+# (bastion/EKS 노드가 실제로 있는 대역)로 ingress를 검 — SG ID로 참조하면 infrastructure를 destroy할 때
+# "아직 참조 중"이라며 AWS가 SG 삭제를 막고(DependencyViolation), infrastructure를 재생성하면 SG ID가
+# 바뀌어서 data를 다시 apply해야 하는 문제가 있었음. CIDR은 infrastructure가 몇 번을 destroy/재생성돼도
+# 안 바뀌므로 data가 infrastructure 재생성에 전혀 영향받지 않음(단, 서브넷 CIDR 변수 자체를 바꾸면 예외).
 module "security_group" {
   source = "../modules/security_group"
 
   project_name = var.project_name
-  vpc_id       = data.terraform_remote_state.platform.outputs.vpc_id
+  vpc_id       = data.terraform_remote_state.infrastructure.outputs.vpc_id
 
   security_groups = {
     "rds-${local.environment}" = {
       ingress = [
         {
-          description     = "MySQL from EKS nodes/pods"
+          description     = "MySQL from private-general subnet (EKS nodes/pods + SSM bastion)"
           from_port       = 3306
           to_port         = 3306
           protocol        = "tcp"
-          security_groups = [data.terraform_remote_state.platform.outputs.eks_cluster_security_group_id]
-          cidr_blocks     = []
-        },
-        {
-          description     = "MySQL from SSM bastion"
-          from_port       = 3306
-          to_port         = 3306
-          protocol        = "tcp"
-          security_groups = [data.terraform_remote_state.platform.outputs.bastion_security_group_id]
-          cidr_blocks     = []
+          security_groups = []
+          cidr_blocks     = data.terraform_remote_state.infrastructure.outputs.private_general_subnet_cidrs
         }
       ]
     }
     "redis-${local.environment}" = {
       ingress = [
         {
-          description     = "Redis from EKS nodes/pods"
+          description     = "Redis from private-general subnet (EKS nodes/pods + SSM bastion)"
           from_port       = 6379
           to_port         = 6379
           protocol        = "tcp"
-          security_groups = [data.terraform_remote_state.platform.outputs.eks_cluster_security_group_id]
-          cidr_blocks     = []
-        },
-        {
-          description     = "Redis from SSM bastion"
-          from_port       = 6379
-          to_port         = 6379
-          protocol        = "tcp"
-          security_groups = [data.terraform_remote_state.platform.outputs.bastion_security_group_id]
-          cidr_blocks     = []
+          security_groups = []
+          cidr_blocks     = data.terraform_remote_state.infrastructure.outputs.private_general_subnet_cidrs
         }
       ]
     }
@@ -114,7 +98,7 @@ module "rds" {
   project_name = var.project_name
   environment  = local.environment
 
-  private_data_subnet_ids = data.terraform_remote_state.platform.outputs.private_data_subnet_ids
+  private_data_subnet_ids = data.terraform_remote_state.infrastructure.outputs.private_data_subnet_ids
   security_group_id       = module.security_group.security_group_ids["rds-${local.environment}"]
 
   db_name                  = var.db_name
@@ -134,7 +118,7 @@ module "redis" {
   project_name = var.project_name
   environment  = local.environment
 
-  private_data_subnet_ids = data.terraform_remote_state.platform.outputs.private_data_subnet_ids
+  private_data_subnet_ids = data.terraform_remote_state.infrastructure.outputs.private_data_subnet_ids
   security_group_id       = module.security_group.security_group_ids["redis-${local.environment}"]
 
   redis_node_type      = local.env_config.redis_node_type
@@ -148,8 +132,8 @@ module "storage" {
   environment  = local.environment
   namespace    = "qket-${local.environment}"
 
-  oidc_provider_arn = data.terraform_remote_state.platform.outputs.oidc_provider_arn
-  oidc_provider_url = data.terraform_remote_state.platform.outputs.oidc_provider_url
+  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
+  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
 
   force_destroy = local.env_config.force_destroy
 }
@@ -169,49 +153,3 @@ resource "kubernetes_config_map" "app_config" {
     AWS_REGION = var.aws_region
   }
 }
-
-# 백엔드 파드로 들어오는 트래픽을 제한. 원래 kubernetes/release|prod/networkpolicy_qKet*.yaml로
-# 수동 관리했는데, namespace(kubernetes_namespace.this)와 마찬가지로 Terraform이 직접 관리하도록 이전.
-# resource "kubernetes_network_policy" "backend_allow_same_namespace" {
-#   metadata {
-#     name      = "backend-allow-same-namespace"
-#     namespace = kubernetes_namespace.this.metadata[0].name
-#   }
-
-#   spec {
-#     pod_selector {
-#       match_labels = {
-#         app = "qket-backend"
-#       }
-#     }
-
-#     policy_types = ["Ingress"]
-
-#     ingress {
-#       # 같은 환경 네임스페이스는 항상 허용
-#       from {
-#         namespace_selector {
-#           match_labels = {
-#             name = kubernetes_namespace.this.metadata[0].name
-#           }
-#         }
-#       }
-
-#       # prod에서만 monitoring 네임스페이스(Prometheus 스크래핑)도 추가로 허용
-#       dynamic "from" {
-#         for_each = local.environment == "prod" ? [1] : []
-#         content {
-#           namespace_selector {
-#             match_labels = {
-#               name = "monitoring"
-#             }
-#           }
-#         }
-#       }
-
-#       ports {
-#         port = "8080"
-#       }
-#     }
-#   }
-# }

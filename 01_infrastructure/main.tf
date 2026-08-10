@@ -101,7 +101,7 @@ resource "aws_route_table_association" "private_data" {
   route_table_id = aws_route_table.private_data.id
 }
 
-# bastion 보안그룹만 여기서 생성 (rds/redis 보안그룹은 workload root에서 환경별로 생성).
+# bastion 보안그룹만 여기서 생성 (rds/redis 보안그룹은 data root에서 환경별로 생성).
 # 인바운드 규칙 없음 — SSM은 인스턴스가 AWS로 나가는 방향으로만 연결하므로 열 포트가 없음.
 module "security_group" {
   source = "../modules/security_group"
@@ -172,11 +172,7 @@ module "github_actions_oidc" {
   }
 }
 
-# ArgoCD - 예외로 Terraform이 직접 관리
-resource "helm_release" "argocd" {
-  name             = "argocd"
-  repository       = "https://argoproj.github.io/argo-helm"
-  chart            = "argo-cd"
-  namespace        = "argocd"
-  create_namespace = true
-}
+# namespace(kubernetes_namespace.qket)와 ArgoCD(helm_release.argocd)는 2026-08-10에
+# ../02_k8s-addon으로 옮김 — kubernetes/helm provider를 쓰는 리소스를 순수 AWS root인
+# 여기와 분리해서 destroy 순서 문제(Access Entry가 먼저 지워져서 Unauthorized)를 구조적으로
+# 없앰. 자세한 내용은 CLAUDE_LLM_WIKI의 eks-destroy-layer-separation 문서 참고.

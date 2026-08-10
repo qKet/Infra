@@ -1,4 +1,4 @@
-# 범용 다중 보안그룹 팩토리 — bastion(platform)과 rds/redis(workload)가
+# 범용 다중 보안그룹 팩토리 — bastion(infrastructure)과 rds/redis(data)가
 # 둘 다 이 모듈을 각자 호출해서 필요한 보안그룹만 만든다.
 # var.security_groups의 key가 보안그룹 이름 suffix, value가 규칙 정의.
 resource "aws_security_group" "this" {
