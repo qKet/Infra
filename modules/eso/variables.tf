@@ -42,3 +42,9 @@ variable "redis_endpoint" {
   description = "ElastiCache Redis 엔드포인트 — connection 시크릿의 REDIS_HOST 값으로 씀"
   type        = string
 }
+
+variable "secret_recovery_window_days" {
+  description = "connection 시크릿 삭제 시 대기기간(일) — release는 0(바로 삭제, 재생성 충돌 방지), prod는 7 이상 권장(실수 삭제 대비)"
+  type        = number
+  default     = 0
+}

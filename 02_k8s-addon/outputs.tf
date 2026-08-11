@@ -7,3 +7,13 @@ output "qket_namespaces" {
   description = "생성된 qket-release/qket-prod 네임스페이스 이름 목록"
   value       = [for ns in kubernetes_namespace.qket : ns.metadata[0].name]
 }
+
+output "alb_controller_role_arn" {
+  description = "ALB Controller IRSA IAM 역할 ARN"
+  value       = module.alb_controller.role_arn
+}
+
+output "external_dns_role_arn" {
+  description = "ExternalDNS IRSA IAM 역할 ARN"
+  value       = module.external_dns.role_arn
+}

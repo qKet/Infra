@@ -4,10 +4,10 @@
 resource "aws_secretsmanager_secret" "connection" {
   name = "${var.project_name}-connection-${var.environment}"
 
-  # dev는 자주 destroy/재생성하는 샌드박스라, 기본 대기기간(최대 30일) 뒤에 지워지면
-  # 같은 이름으로 재생성할 때 "삭제 예정이라 못 만든다"는 충돌이 남 — 그래서 바로 지워지게 함.
-  # prod 만들 때는 실수 삭제 대비해서 recovery_window_in_days를 7 이상으로 켤 것.
-  recovery_window_in_days = 0
+  # release는 자주 destroy/재생성하는 샌드박스라, 기본 대기기간(최대 30일) 뒤에 지워지면
+  # 같은 이름으로 재생성할 때 "삭제 예정이라 못 만든다"는 충돌이 남 — 그래서 0(바로 삭제)으로 둠.
+  # prod는 호출하는 쪽(04_data의 env_config_map)에서 7 이상으로 넘겨서 실수 삭제를 방지함.
+  recovery_window_in_days = var.secret_recovery_window_days
 }
 
 resource "aws_secretsmanager_secret_version" "connection" {

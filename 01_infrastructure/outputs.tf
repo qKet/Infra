@@ -118,13 +118,6 @@ output "cluster_admins_group_name" {
   value       = module.eks.cluster_admins_group_name
 }
 
-# module.alb_controller를 backup/modules/alb-controller, backup/infrastructure/alb-controller.tf로 이동 (helm 설치 여부 보류).
-# 재활성화 시 이 output도 같이 복구할 것.
-# output "alb_controller_role_arn" {
-#   description = "ALB Controller IRSA IAM 역할 ARN"
-#   value       = module.alb_controller.role_arn
-# }
-
 output "ssm_bastion_instance_id" {
   description = "SSM 세션 연결에 쓸 bastion 인스턴스 ID (aws ssm start-session --target <이값>)"
   value       = module.ec2.instance_id
