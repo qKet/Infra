@@ -125,5 +125,9 @@ output "ssm_bastion_instance_id" {
 
 output "bastion_security_group_id" {
   description = "bastion 보안그룹 ID — data root의 RDS/Redis 보안그룹에서 참조"
-  value       = module.security_group.security_group_ids["bastion"]
+  # try()로 감쌈 — 매일 밤 destroy 상태일 땐 module.security_group 자체가 없어서
+  # security_group_ids가 빈 맵이 되고, 존재하지 않는 키로 인덱싱하면 하드 에러가 남
+  # (2026-08-11 실제로 겪음 — terraform apply -refresh-only가 이 출력값 하나 때문에 통째로 실패).
+  # 다른 root가 이 값을 읽을 땐 어차피 04_data가 CIDR 기반 참조로 전환돼있어서 null이어도 안전함.
+  value = try(module.security_group.security_group_ids["bastion"], null)
 }

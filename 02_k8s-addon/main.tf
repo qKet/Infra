@@ -102,8 +102,18 @@ locals {
 }
 
 # app-alb-ingress — CD/helm/templates/ingress.yaml에 있던 것과 내용 동일(annotation/host/backend
-# service 전부). frontend Service(qket-frontend-service)는 여전히 CD/helm(ArgoCD)이 만듦 — Ingress가
+# service 전부). frontend/backend Service는 둘 다 여전히 CD/helm(ArgoCD)이 만듦 — Ingress가
 # 그 이름을 문자열로 참조할 뿐, Terraform이 Service의 존재를 보장하진 않음(GitOps가 먼저 떠있다는 전제).
+#
+# 2026-08-11: /api 경로 규칙 추가 — 원래는 frontend(Next.js)의 next.config.mjs rewrites()가
+# /api/*를 backend로 프록시했는데, output:"standalone" 빌드에서 rewrites()가 next build 시점에
+# 고정돼버려서 CI가 CLUSTER_IP를 빌드 환경에도 넣어줘야 하는 문제가 있었음(frontend 레포 CI가
+# K8s 서비스 이름을 알아야 하는 게 부자연스러움 — 실제로 겪은 버그). ALB가 path로 직접 나누면
+# 브라우저→백엔드 경로에 Next.js 서버가 아예 안 끼어서 이 문제 자체가 사라짐. /api가 /보다
+# 구체적인 경로라 반드시 먼저 선언 — ALB Ingress는 선언 순서대로 우선순위를 매기지, "더 구체적인
+# 경로가 자동으로 이김" 방식이 아니라서 순서를 안 지키면 /가 /api/*까지 먼저 가로채버림.
+# (백엔드 Spring Boot의 context-path가 이미 /api라서, ALB는 경로를 안 건드리고 그대로 전달하면 됨 —
+# rewrite-target 같은 별도 설정 불필요)
 #
 # kubectl_manifest가 아니라 네이티브 kubernetes_ingress_v1을 쓴다 — 둘 다 처음엔 후보였는데,
 # 2026-08-10에 실제로 kubectl_manifest로 만들어봤다가 destroy 때 사고가 났다: kubectl_manifest는
@@ -126,15 +136,24 @@ locals {
 # eks-destroy-layer-separation 문서 참고). depends_on을 선언한 쪽(ingress)이 destroy 시 먼저
 # 없어지므로, "ingress → alb_controller" 방향이 정확히 우리가 원하는 순서(Ingress 먼저, 컨트롤러
 # 나중)와 일치한다.
-resource "kubernetes_ingress_v1" "app_ingress" {
+# 2026-08-11: backend/frontend Ingress를 분리함 — ALB Ingress Controller의 healthcheck-path 같은
+# annotation은 "Ingress 오브젝트 전체"에 적용되지, path별로 다르게 못 줌. 근데 backend(Spring Boot,
+# context-path=/api)와 frontend(Next.js)는 헬스체크 경로가 다르게 필요함(backend는 "/"에 아무것도
+# 없어서 404 — 대신 /api/actuator/health가 200을 줌, frontend는 "/"가 기본값 그대로 정상).
+# 하나의 Ingress에 두 path를 같이 넣었더니 healthcheck-path를 하나만 줄 수 있어서 둘 중 하나는
+# 항상 비정상으로 뜨는 문제를 실제로 겪음 — group.name을 공유하는 별도 Ingress 두 개로 나눠서 해결.
+# group.order로 우선순위 강제(낮은 숫자가 먼저 평가됨) — backend(/api)가 frontend(/)보다 구체적인
+# 경로라 반드시 먼저 평가돼야 함(안 그러면 /가 /api/*까지 먼저 가로챔).
+resource "kubernetes_ingress_v1" "app_ingress_backend" {
   for_each = local.ingress_config
 
   metadata {
-    name      = "app-alb-ingress"
+    name      = "app-alb-ingress-backend"
     namespace = kubernetes_namespace.qket[each.key].metadata[0].name
 
     annotations = {
       "alb.ingress.kubernetes.io/group.name"         = "qket"
+      "alb.ingress.kubernetes.io/group.order"        = "10"
       "alb.ingress.kubernetes.io/tags"               = "Team=team5,Project=qket"
       "alb.ingress.kubernetes.io/load-balancer-name" = "team5-qket-alb"
       "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
@@ -142,6 +161,57 @@ resource "kubernetes_ingress_v1" "app_ingress" {
       "alb.ingress.kubernetes.io/certificate-arn"    = each.value.certificate_arn
       "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
       "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
+      "alb.ingress.kubernetes.io/healthcheck-path"   = "/api/actuator/health"
+    }
+  }
+
+  spec {
+    ingress_class_name = "alb"
+
+    rule {
+      host = each.value.host
+
+      http {
+        path {
+          path      = "/api"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "qket-backend-service"
+              port {
+                number = 80
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  wait_for_load_balancer = false
+
+  depends_on = [module.alb_controller]
+}
+
+resource "kubernetes_ingress_v1" "app_ingress_frontend" {
+  for_each = local.ingress_config
+
+  metadata {
+    name      = "app-alb-ingress-frontend"
+    namespace = kubernetes_namespace.qket[each.key].metadata[0].name
+
+    annotations = {
+      "alb.ingress.kubernetes.io/group.name"         = "qket"
+      "alb.ingress.kubernetes.io/group.order"        = "20"
+      "alb.ingress.kubernetes.io/tags"               = "Team=team5,Project=qket"
+      "alb.ingress.kubernetes.io/load-balancer-name" = "team5-qket-alb"
+      "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"        = "ip"
+      "alb.ingress.kubernetes.io/certificate-arn"    = each.value.certificate_arn
+      "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
+      "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
+      # healthcheck-path 안 줌 — 기본값 "/"이 frontend엔 이미 정상 응답이라 그대로 둠
     }
   }
 

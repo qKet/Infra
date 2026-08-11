@@ -93,3 +93,32 @@ resource "aws_iam_role_policy" "ecr_push" {
   role   = aws_iam_role.ci[each.key].id
   policy = data.aws_iam_policy_document.ecr_push[each.key].json
 }
+
+# 2026-08-11: frontend CI가 빌드 직전에 NEXT_PUBLIC_TOSS_CLIENT_KEY를 Secrets Manager에서
+# 직접 가져가야 해서, frontend role에만 이 권한을 추가함(backend는 시크릿을 CI에서 안 씀 —
+# ESO가 런타임에 대신 처리하므로). 정확한 시크릿 ARN 대신 이름 prefix + 와일드카드를 쓴 이유:
+# 이 시크릿은 04_data(다른 root, workspace별로 release/prod 두 번 생성됨)가 만드는데,
+# 03_registry가 04_data의 상태를 직접 참조하면 새로운 root 간 의존관계가 생기고 release/prod
+# 중 뭘 참조할지도 애매해짐. Secrets Manager ARN은 이름 뒤에 AWS가 무작위 6자리를 붙이는
+# 형식이라("team5-qket-external-api-release-AbCdEf"), 이름 prefix 와일드카드로 release/prod
+# 둘 다 정확히, 그리고 딱 이 용도의 시크릿만 커버 가능(다른 시크릿엔 접근 불가).
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+data "aws_iam_policy_document" "frontend_secrets_read" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+    ]
+    resources = [
+      "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}-external-api-*",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "frontend_secrets_read" {
+  name   = "${var.project_name}-gha-frontend-secrets-read"
+  role   = aws_iam_role.ci["frontend"].id
+  policy = data.aws_iam_policy_document.frontend_secrets_read.json
+}

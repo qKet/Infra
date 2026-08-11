@@ -182,4 +182,5 @@ module "eso" {
   redis_endpoint             = module.redis.redis_endpoint
 
   secret_recovery_window_days = local.env_config.secret_recovery_window_days
+  external_api_keys           = var.external_api_keys
 }
