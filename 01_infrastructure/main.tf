@@ -134,8 +134,12 @@ module "eks" {
 module "ec2" {
   source = "../modules/ec2"
 
-  project_name          = var.project_name
-  subnet_id             = module.subnet.private_general_subnet_ids[0]
-  security_group_id     = module.security_group.security_group_ids["bastion"]
+  project_name = var.project_name
+  subnet_id    = module.subnet.private_general_subnet_ids[0]
+  # try()로 감쌈 — module.security_group이 destroy된 상태(매일 밤)에는 security_group_ids가
+  # 빈 맵이라 존재하지 않는 키 인덱싱이 하드 에러를 냄(2026-08-11 실제로 겪음 — terraform
+  # apply -refresh-only가 module.ec2 자체는 안 건드리는데도 이 표현식 평가 때문에 통째로 실패).
+  # 실제 apply(아침, 전체 재생성)할 땐 module.security_group이 먼저 만들어지므로 정상적인 값이 들어감.
+  security_group_id     = try(module.security_group.security_group_ids["bastion"], null)
   bastion_instance_type = var.bastion_instance_type
 }

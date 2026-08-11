@@ -19,24 +19,26 @@ locals {
 
   env_config_map = {
     release = {
-      db_instance_class        = "db.t3.micro"
-      db_allocated_storage     = 20
-      db_max_allocated_storage = 100
-      multi_az                 = false
-      skip_final_snapshot      = true
-      deletion_protection      = false
-      redis_node_type          = "cache.t3.micro"
-      force_destroy            = true
+      db_instance_class           = "db.t3.micro"
+      db_allocated_storage        = 20
+      db_max_allocated_storage    = 100
+      multi_az                    = false
+      skip_final_snapshot         = true
+      deletion_protection         = false
+      redis_node_type             = "cache.t3.micro"
+      force_destroy               = true
+      secret_recovery_window_days = 0 # 바로 삭제 — 자주 재생성하는 샌드박스라 대기기간 있으면 이름 충돌 남
     }
     prod = {
-      db_instance_class        = "db.t3.small"
-      db_allocated_storage     = 50
-      db_max_allocated_storage = 200
-      multi_az                 = true
-      skip_final_snapshot      = false
-      deletion_protection      = true
-      redis_node_type          = "cache.t3.small"
-      force_destroy            = false
+      db_instance_class           = "db.t3.small"
+      db_allocated_storage        = 50
+      db_max_allocated_storage    = 200
+      multi_az                    = true
+      skip_final_snapshot         = false
+      deletion_protection         = true
+      redis_node_type             = "cache.t3.small"
+      force_destroy               = false
+      secret_recovery_window_days = 7 # 실수 삭제 대비 — 7일 대기 후 진짜 삭제
     }
   }
 
@@ -152,4 +154,33 @@ resource "kubernetes_config_map" "app_config" {
     REDIS_PORT = tostring(module.redis.redis_port)
     AWS_REGION = var.aws_region
   }
+}
+
+# ESO(External Secrets Operator) — AWS Secrets Manager의 값을 K8s Secret(db-secrets/redis-secrets)으로
+# 동기화. RDS가 자동 생성한 마스터 계정 시크릿(username/password)과, 여기서 새로 만드는 "connection"
+# 시크릿(DB_HOST/REDIS_HOST)을 합쳐서 CD 헬름 차트(values-release.yaml의 backend.secrets)가 기대하는
+# 그 두 개(db-secrets, redis-secrets)를 정확히 만들어냄.
+#
+# 02_k8s-addon이 아니라 여기(04_data)에 두는 이유: rds_master_user_secret_arn/rds_endpoint/redis_endpoint가
+# 전부 이 root가 만든 값이라, k8s-addon(04_data보다 먼저 apply됨)에 두면 아직 없는 값을 참조하는
+# 순환 의존이 생김. 대신 namespace(qket-release/qket-prod)가 02_k8s-addon 소관이라 매일 밤 destroy될 때
+# 이 db-secrets/redis-secrets도 같이 사라지므로, IRSA ServiceAccount/ConfigMap과 마찬가지로 아침에
+# 이 root를 다시 apply해야 함 — 자세한 내용은 CLAUDE_LLM_WIKI의 daily-infrastructure-toggle 문서 참고.
+module "eso" {
+  source = "../modules/eso"
+
+  project_name = var.project_name
+  environment  = local.environment
+  aws_region   = var.aws_region
+  namespace    = "qket-${local.environment}"
+
+  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
+  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  rds_master_user_secret_arn = module.rds.rds_master_user_secret_arn
+  rds_endpoint               = module.rds.rds_endpoint
+  redis_endpoint             = module.redis.redis_endpoint
+
+  secret_recovery_window_days = local.env_config.secret_recovery_window_days
+  external_api_keys           = var.external_api_keys
 }

@@ -29,7 +29,7 @@ resource "aws_iam_role" "eso" {
   assume_role_policy = data.aws_iam_policy_document.eso_assume.json
 }
 
-# RDS 자동 생성 시크릿 + 방금 만든 connection 시크릿, 딱 이 두 개만 읽기 허용 (최소 권한)
+# RDS 자동 생성 시크릿 + connection + external_api, 딱 이 세 개만 읽기 허용 (최소 권한)
 data "aws_iam_policy_document" "eso_secrets_read" {
   statement {
     effect = "Allow"
@@ -40,6 +40,7 @@ data "aws_iam_policy_document" "eso_secrets_read" {
     resources = [
       var.rds_master_user_secret_arn,
       aws_secretsmanager_secret.connection.arn,
+      aws_secretsmanager_secret.external_api.arn,
     ]
   }
 }

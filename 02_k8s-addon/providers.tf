@@ -2,6 +2,10 @@ terraform {
   required_version = ">= 1.5"
 
   required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.30"
@@ -9,6 +13,23 @@ terraform {
     helm = {
       source  = "hashicorp/helm"
       version = "~> 2.14"
+    }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.0"
+    }
+  }
+}
+
+# module.alb_controller가 aws_iam_role/aws_iam_role_policy를 만들어서 aws provider 필요
+# (namespace/ArgoCD만 있을 땐 kubernetes/helm provider만으로 충분했음).
+provider "aws" {
+  region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project     = var.project_name
+      Environment = "shared"
     }
   }
 }
