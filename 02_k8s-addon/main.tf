@@ -106,6 +106,32 @@ module "monitoring" {
   depends_on = [module.alb_controller]
 }
 
+# backend API 지표(응답시간, 요청수, HikariCP, JVM 등)를 Prometheus가 스크랩하게 등록.
+# wiki decisions/2026-08-11-monitoring-stack-design 문서상 "2차(나중)" 범위였던 앱 레벨 지표 —
+# release 환경만 우선 커버. backend Service(qket-backend-service)에 포트 이름이 없어서
+# port(이름) 대신 targetPort(번호)로 참조함 — Service에 `name: http`를 붙이면 더 표준적인
+# port 참조로 바꿀 수 있음.
+resource "kubernetes_manifest" "backend_service_monitor" {
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "qket-backend"
+      namespace = "monitoring"
+      labels    = { release = "monitoring" }
+    }
+    spec = {
+      namespaceSelector = { matchNames = ["qket-release"] }
+      selector           = { matchLabels = { app = "qket-backend" } }
+      endpoints = [
+        { targetPort = 8080, path = "/api/actuator/prometheus", interval = "15s" }
+      ]
+    }
+  }
+
+  depends_on = [module.monitoring]
+}
+
 # 환경별 Ingress 설정 — 원래 CD/helm/templates/ingress.yaml(ArgoCD가 배포)이 갖고 있었는데,
 # Terraform(alb_controller가 있는 이 root)으로 옮김: destroy 시 "Ingress가 alb_controller보다
 # 먼저 없어져야 한다"는 순서를 같은 state 안에서 depends_on으로 직접 강제하기 위해서.
