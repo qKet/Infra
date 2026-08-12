@@ -1,0 +1,11 @@
+{
+  "name": "cancel-alert-mailer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NOTI01_ALERT01 취소표 알림 — SQS 트리거로 SES SendEmail 발송",
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.600.0"
+  }
+}

@@ -137,7 +137,8 @@ module "storage" {
   oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
 
-  force_destroy = local.env_config.force_destroy
+  force_destroy          = local.env_config.force_destroy
+  cancel_alert_queue_arn = module.cancel_alert_queue.queue_arn
 }
 
 # DB_PORT/DB_NAME/REDIS_PORT/AWS_REGION — 전부 사람이 GitHub Variables에 따로 입력할 필요 없이
@@ -149,10 +150,11 @@ resource "kubernetes_config_map" "app_config" {
   }
 
   data = {
-    DB_PORT    = tostring(module.rds.rds_port)
-    DB_NAME    = module.rds.rds_db_name
-    REDIS_PORT = tostring(module.redis.redis_port)
-    AWS_REGION = var.aws_region
+    DB_PORT                = tostring(module.rds.rds_port)
+    DB_NAME                = module.rds.rds_db_name
+    REDIS_PORT             = tostring(module.redis.redis_port)
+    AWS_REGION             = var.aws_region
+    CANCEL_ALERT_QUEUE_URL = module.cancel_alert_queue.queue_url
   }
 }
 
@@ -166,6 +168,27 @@ resource "kubernetes_config_map" "app_config" {
 # 순환 의존이 생김. 대신 namespace(qket-release/qket-prod)가 02_k8s-addon 소관이라 매일 밤 destroy될 때
 # 이 db-secrets/redis-secrets도 같이 사라지므로, IRSA ServiceAccount/ConfigMap과 마찬가지로 아침에
 # 이 root를 다시 apply해야 함 — 자세한 내용은 CLAUDE_LLM_WIKI의 daily-infrastructure-toggle 문서 참고.
+# NOTI01_ALERT01(취소표 알림) — backend가 publish, Lambda가 consume. rds/redis처럼 release/prod마다
+# 따로 존재(운영 트래픽이 개발/스테이징 알림과 섞이면 안 되므로 큐도 여기서 workspace별로 나눔).
+module "cancel_alert_queue" {
+  source = "../modules/sqs"
+
+  project_name = var.project_name
+  environment  = local.environment
+}
+
+module "cancel_alert_mailer" {
+  source = "../modules/lambda"
+
+  project_name = var.project_name
+  environment  = local.environment
+  source_dir   = "${path.module}/../lambda/cancel-alert-mailer"
+
+  queue_arn        = module.cancel_alert_queue.queue_arn
+  ses_identity_arn = data.terraform_remote_state.registry.outputs.ses_identity_arn
+  from_email       = var.cancel_alert_from_email
+}
+
 module "eso" {
   source = "../modules/eso"
 

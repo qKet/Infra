@@ -28,3 +28,8 @@ variable "force_destroy" {
   type        = bool
   default     = true
 }
+
+variable "cancel_alert_queue_arn" {
+  description = "NOTI01_ALERT01(취소표 알림) SQS 큐 ARN — backend IRSA에 sqs:SendMessage 권한을 줄 때 씀 (modules/sqs.queue_arn)"
+  type        = string
+}
