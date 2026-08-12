@@ -27,3 +27,13 @@ variable "prometheus_irsa_role_arn" {
   description = "Prometheus ServiceAccount에 붙일 IRSA Role ARN — AMP remote_write 권한용 (01_infrastructure 출력값)"
   type        = string
 }
+
+variable "amp_workspace_arn" {
+  description = "AMP workspace ARN — Grafana의 aps:QueryMetrics 등 조회 권한 정책 리소스 스코핑에 사용 (01_infrastructure 출력값)"
+  type        = string
+}
+
+variable "amp_query_endpoint" {
+  description = "Grafana가 AMP를 Prometheus 호환 데이터소스로 조회할 엔드포인트 (01_infrastructure 출력값)"
+  type        = string
+}

@@ -59,3 +59,26 @@ resource "aws_iam_role_policy" "grafana_cloudwatch_read" {
   role   = aws_iam_role.grafana.id
   policy = data.aws_iam_policy_document.grafana_cloudwatch_read.json
 }
+
+# Grafana가 AMP(Amazon Managed Prometheus)를 데이터소스로 직접 조회하기 위한 권한.
+# 이게 없으면 Prometheus는 AMP에 데이터를 계속 잘 보내고 있어도, Grafana 화면에는
+# 안 보임 — Grafana는 여전히 로컬(클러스터 안) Prometheus만 조회하는 상태이기 때문.
+# QueryMetrics는 리소스 단위 스코핑 지원해서 workspace ARN으로 제한(CloudWatch와 달리).
+data "aws_iam_policy_document" "grafana_amp_query" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "aps:QueryMetrics",
+      "aps:GetSeries",
+      "aps:GetLabels",
+      "aps:GetMetricMetadata",
+    ]
+    resources = [var.amp_workspace_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "grafana_amp_query" {
+  name   = "${var.project_name}-grafana-amp-query"
+  role   = aws_iam_role.grafana.id
+  policy = data.aws_iam_policy_document.grafana_amp_query.json
+}

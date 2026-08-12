@@ -105,6 +105,8 @@ module "monitoring" {
 
   amp_remote_write_endpoint = data.terraform_remote_state.infrastructure.outputs.amp_remote_write_endpoint
   prometheus_irsa_role_arn  = data.terraform_remote_state.infrastructure.outputs.prometheus_irsa_role_arn
+  amp_workspace_arn         = data.terraform_remote_state.infrastructure.outputs.amp_workspace_arn
+  amp_query_endpoint        = data.terraform_remote_state.infrastructure.outputs.amp_query_endpoint
 
   depends_on = [module.alb_controller]
 }

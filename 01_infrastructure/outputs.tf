@@ -128,6 +128,11 @@ output "prometheus_irsa_role_arn" {
   value       = module.irsa.role_arns["prometheus-amp"]
 }
 
+output "amp_workspace_arn" {
+  description = "AMP workspace ARN — Grafana 쿼리 권한(IAM policy resource)에 사용"
+  value       = aws_prometheus_workspace.this.arn
+}
+
 output "cluster_admins_group_name" {
   description = "이 IAM 그룹에 팀원을 추가하면 클러스터 admin 접근 가능 (콘솔/CLI에서 직접, terraform 안 건드림)"
   value       = module.eks.cluster_admins_group_name
