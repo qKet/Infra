@@ -184,3 +184,17 @@ module "eso" {
   secret_recovery_window_days = local.env_config.secret_recovery_window_days
   external_api_keys           = var.external_api_keys
 }
+
+# 이메일 인증번호 발송 — SQS(backend가 요청 넣음) → Lambda(SES로 발송). release/prod 각자
+# 큐/함수를 가짐(테스트 발송이 실제 서비스랑 안 섞이게). SES 도메인 인증 자체는 03_registry에
+# 있음(도메인당 한 번만 해야 해서 — modules/messaging/iam.tf 주석 참고).
+module "messaging" {
+  source = "../modules/messaging"
+
+  project_name = var.project_name
+  environment  = local.environment
+  aws_region   = var.aws_region
+
+  from_email = "noreply@jun979.click"
+  ses_domain = "jun979.click"
+}
