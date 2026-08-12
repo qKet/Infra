@@ -101,4 +101,26 @@ resource "helm_release" "monitoring" {
     name  = "grafana.additionalDataSources[0].jsonData.defaultRegion"
     value = var.aws_region
   }
+
+  # RDS/Redis 지표는 백엔드가 직접 노출 안 해서(HikariCP는 예외) CloudWatch 데이터소스로 봄.
+  # IAM은 iam.tf의 grafana_cloudwatch_read 정책으로 이미 준비돼있음(IRSA, 이 Grafana ServiceAccount 전용).
+  set {
+    name  = "grafana.additionalDataSources[1].name"
+    value = "CloudWatch"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].type"
+    value = "cloudwatch"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].jsonData.authType"
+    value = "default"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].jsonData.defaultRegion"
+    value = var.aws_region
+  }
 }
