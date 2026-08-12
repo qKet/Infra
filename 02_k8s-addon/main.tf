@@ -106,6 +106,26 @@ module "monitoring" {
   depends_on = [module.alb_controller]
 }
 
+# Grafana 대시보드 정의를 git에 저장 — EKS를 destroy/재생성해도 module.monitoring만 다시
+# apply하면 대시보드가 자동으로 돌아옴(module.monitoring의 sidecar.dashboards 설정이 이
+# ConfigMap을 grafana_dashboard=1 라벨로 찾아서 자동 로드). JSON은 Grafana UI의 dashboard
+# settings > JSON Model에서 export한 것을 그대로 커밋해두면 됨.
+resource "kubernetes_config_map" "grafana_dashboards" {
+  metadata {
+    name      = "qket-grafana-dashboards"
+    namespace = "monitoring"
+    labels = {
+      grafana_dashboard = "1"
+    }
+  }
+
+  data = {
+    "qket-monitoring.json" = file("${path.module}/dashboards/qket-monitoring.json")
+  }
+
+  depends_on = [module.monitoring]
+}
+
 # backend API 지표(응답시간, 요청수, HikariCP, JVM 등)를 Prometheus가 스크랩하게 등록.
 # wiki decisions/2026-08-11-monitoring-stack-design 문서상 "2차(나중)" 범위였던 앱 레벨 지표 —
 # release 환경만 우선 커버. backend Service(qket-backend-service)에 포트 이름이 없어서

@@ -25,4 +25,18 @@ resource "helm_release" "monitoring" {
     name  = "grafana.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
     value = aws_iam_role.grafana.arn
   }
+
+  # 대시보드를 git(ConfigMap)에서 자동으로 읽어오게 함 — sidecar 컨테이너가
+  # grafana_dashboard=1 라벨 붙은 ConfigMap을 감지해서 자동 로드. EKS를 destroy/재생성해도
+  # 이 helm_release만 다시 apply하면 대시보드가 그대로 돌아옴(02_k8s-addon/main.tf의
+  # kubernetes_config_map.grafana_dashboards가 실제 ConfigMap을 공급).
+  set {
+    name  = "grafana.sidecar.dashboards.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.sidecar.dashboards.label"
+    value = "grafana_dashboard"
+  }
 }
