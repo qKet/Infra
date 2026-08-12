@@ -103,6 +103,9 @@ module "monitoring" {
   oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
 
+  amp_remote_write_endpoint = data.terraform_remote_state.infrastructure.outputs.amp_remote_write_endpoint
+  prometheus_irsa_role_arn  = data.terraform_remote_state.infrastructure.outputs.prometheus_irsa_role_arn
+
   depends_on = [module.alb_controller]
 }
 

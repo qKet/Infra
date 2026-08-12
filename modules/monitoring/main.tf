@@ -39,4 +39,22 @@ resource "helm_release" "monitoring" {
     name  = "grafana.sidecar.dashboards.label"
     value = "grafana_dashboard"
   }
+
+  # Prometheus가 수집한 지표를 AMP(Amazon Managed Prometheus)로 원격 저장 — EKS를
+  # destroy/재생성해도 지표 히스토리가 안 없어지게 함(일반 EBS는 PVC가 클러스터랑 같이
+  # 삭제되면서 볼륨도 같이 지워져서 이 문제를 못 풂 — 01_infrastructure/monitoring.tf 참고).
+  set {
+    name  = "prometheus.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = var.prometheus_irsa_role_arn
+  }
+
+  set {
+    name  = "prometheus.prometheusSpec.remoteWrite[0].url"
+    value = var.amp_remote_write_endpoint
+  }
+
+  set {
+    name  = "prometheus.prometheusSpec.remoteWrite[0].sigv4.region"
+    value = var.aws_region
+  }
 }
