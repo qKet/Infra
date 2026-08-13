@@ -32,10 +32,7 @@ module "github_actions_oidc" {
   }
 }
 
-# 예매 오픈 알림 발신 도메인. release/prod 구분 없는 도메인 단위 리소스라 ECR/OIDC와
-# 같은 이유로 여기 둠(04_data는 workspace별로 두 번 생기는 구조라 안 맞음). 반드시 import 먼저 — modules/ses/main.tf 상단 주석 참고.
-module "ses" {
-  source = "../modules/ses"
-
-  domain = var.ses_domain
-}
+# SES 도메인 인증(jun979.click)은 ses.tf(이메일인증/예매확정·취소 알림용으로 먼저 만들어짐)가 관리 —
+# 예매 오픈 알림도 같은 도메인을 쓰지만, SES 도메인 인증은 계정당 하나뿐이라 별도 모듈로 안 두고
+# modules/lambda가 ses.tf 결과를 계정/리전/도메인명으로 직접 계산해서 참조함(중복 관리 방지).
+# 자세한 이유는 modules/messaging/iam.tf의 동일 패턴 주석 참고.

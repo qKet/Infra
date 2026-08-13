@@ -31,6 +31,14 @@ resource "aws_iam_role_policy_attachment" "logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# SES 도메인 identity ARN — 계정ID+리전+도메인명으로 완전히 결정되는 값(랜덤 접미사 없음)이라
+# 데이터소스로 직접 계산 가능. 도메인 자체의 인증(aws_ses_domain_identity)은 03_registry/ses.tf가
+# 관리(계정당 도메인 인증은 한 번만 해야 해서 여기 모듈에 따로 안 둠) — modules/messaging/iam.tf와
+# 동일 패턴. 03_registry가 이 도메인을 실제로 인증해뒀다는 전제이고, 순서가 어긋나면 apply 시점에
+# "그런 identity 없음" 에러로 바로 드러남.
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
 # 딱 이 큐에서 소비 + 딱 이 SES identity로만 발송 — 최소 권한(backend-irsa.tf의 S3 정책과 같은 원칙)
 data "aws_iam_policy_document" "permissions" {
   statement {
@@ -40,9 +48,11 @@ data "aws_iam_policy_document" "permissions" {
   }
 
   statement {
-    effect    = "Allow"
-    actions   = ["ses:SendEmail"]
-    resources = [var.ses_identity_arn]
+    effect  = "Allow"
+    actions = ["ses:SendEmail"]
+    resources = [
+      "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:identity/${var.ses_domain}",
+    ]
   }
 }
 

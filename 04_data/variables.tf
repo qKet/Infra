@@ -51,7 +51,7 @@ variable "redis_engine_version" {
 *     예매 오픈 알림
 *******************/
 variable "open_alert_from_email" {
-  description = "예매 오픈 알림 메일 발신자 주소 — modules/ses.ses_domain(03_registry) 소속이어야 함"
+  description = "예매 오픈 알림 메일 발신자 주소 — 03_registry/ses.tf가 인증해둔 도메인 소속이어야 함"
   type        = string
   default     = "noreply@jun979.click"
 }

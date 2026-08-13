@@ -18,8 +18,8 @@ variable "queue_arn" {
   type        = string
 }
 
-variable "ses_identity_arn" {
-  description = "SES SendEmail 권한을 줄 identity ARN (modules/ses.identity_arn)"
+variable "ses_domain" {
+  description = "SES SendEmail 권한을 줄 도메인 — 03_registry/ses.tf가 인증해둔 도메인이어야 함 (예: jun979.click)"
   type        = string
 }
 
