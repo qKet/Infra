@@ -61,7 +61,7 @@ locals {
 # 바뀌어서 data를 다시 apply해야 하는 문제가 있었음. CIDR은 infrastructure가 몇 번을 destroy/재생성돼도
 # 안 바뀌므로 data가 infrastructure 재생성에 전혀 영향받지 않음(단, 서브넷 CIDR 변수 자체를 바꾸면 예외).
 module "security_group" {
-  source = "../modules/security_group"
+  source = "../modules/addons/security_group"
 
   project_name = var.project_name
   vpc_id       = data.terraform_remote_state.infrastructure.outputs.vpc_id
@@ -95,7 +95,7 @@ module "security_group" {
 }
 
 module "rds" {
-  source = "../modules/rds"
+  source = "../modules/addons/rds"
 
   project_name = var.project_name
   environment  = local.environment
@@ -115,7 +115,7 @@ module "rds" {
 }
 
 module "redis" {
-  source = "../modules/redis"
+  source = "../modules/addons/redis"
 
   project_name = var.project_name
   environment  = local.environment
@@ -128,7 +128,7 @@ module "redis" {
 }
 
 module "storage" {
-  source = "../modules/storage"
+  source = "../modules/addons/storage"
 
   project_name = var.project_name
   environment  = local.environment
@@ -167,7 +167,7 @@ resource "kubernetes_config_map" "app_config" {
 # 이 db-secrets/redis-secrets도 같이 사라지므로, IRSA ServiceAccount/ConfigMap과 마찬가지로 아침에
 # 이 root를 다시 apply해야 함 — 자세한 내용은 CLAUDE_LLM_WIKI의 daily-infrastructure-toggle 문서 참고.
 module "eso" {
-  source = "../modules/eso"
+  source = "../modules/addons/eso"
 
   project_name = var.project_name
   environment  = local.environment

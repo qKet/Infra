@@ -30,7 +30,7 @@ data "aws_iam_policy_document" "amp_write" {
 # (modules/irsa 설명 참고 — Helm이 SA를 직접 만드는 애드온 케이스. modules/monitoring의
 # Grafana IRSA와 같은 목적, 대상만 Prometheus로 다름).
 module "irsa" {
-  source = "../modules/irsa"
+  source = "../modules/addons/irsa"
 
   project_name      = var.project_name
   oidc_provider_arn = module.eks.oidc_provider_arn
