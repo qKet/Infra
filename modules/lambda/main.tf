@@ -1,11 +1,11 @@
-# NOTI01_ALERT01(취소표 알림) 발송 Lambda. 코드는 Infra/lambda/cancel-alert-mailer에 있고,
+# 예매 오픈 알림 발송 Lambda. 코드는 Infra/lambda/open-alert-mailer에 있고,
 # terraform apply 전에 그 디렉토리에서 `npm install --production`을 먼저 돌려둬야 한다 — Lambda
 # Node.js 20.x 런타임은 aws-sdk를 더 이상 기본 번들하지 않아서 @aws-sdk/client-sesv2를 직접 담아야 함
 # (archive_file이 source_dir을 있는 그대로 zip으로 묶으므로 node_modules가 없으면 그냥 안 담김 → 런타임에 모듈을 못 찾아 즉시 실패).
 data "archive_file" "this" {
   type        = "zip"
   source_dir  = var.source_dir
-  output_path = "${path.module}/.build/cancel-alert-mailer.zip"
+  output_path = "${path.module}/.build/open-alert-mailer.zip"
 }
 
 data "aws_iam_policy_document" "assume" {
@@ -21,7 +21,7 @@ data "aws_iam_policy_document" "assume" {
 }
 
 resource "aws_iam_role" "this" {
-  name               = "${var.project_name}-cancel-alert-mailer-role-${var.environment}"
+  name               = "${var.project_name}-open-alert-mailer-role-${var.environment}"
   assume_role_policy = data.aws_iam_policy_document.assume.json
 }
 
@@ -47,13 +47,13 @@ data "aws_iam_policy_document" "permissions" {
 }
 
 resource "aws_iam_role_policy" "permissions" {
-  name   = "${var.project_name}-cancel-alert-mailer-${var.environment}"
+  name   = "${var.project_name}-open-alert-mailer-${var.environment}"
   role   = aws_iam_role.this.id
   policy = data.aws_iam_policy_document.permissions.json
 }
 
 resource "aws_lambda_function" "this" {
-  function_name = "${var.project_name}-cancel-alert-mailer-${var.environment}"
+  function_name = "${var.project_name}-open-alert-mailer-${var.environment}"
   role          = aws_iam_role.this.arn
   handler       = "index.handler"
   runtime       = "nodejs20.x"

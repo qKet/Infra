@@ -26,10 +26,10 @@ variable "ecr_repository_name" {
 }
 
 /*******************
-*     SES (NOTI01_ALERT01 취소표 알림)
+*     SES (예매 오픈 알림)
 *******************/
 variable "ses_domain" {
-  description = "취소표 알림 발신용 SES verify 도메인 — ECR/OIDC와 마찬가지로 release/prod 공용 싱글턴이라 여기 둠"
+  description = "예매 오픈 알림 발신용 SES verify 도메인 — ECR/OIDC와 마찬가지로 release/prod 공용 싱글턴이라 여기 둠"
   type        = string
   default     = "jun979.click"
 }
