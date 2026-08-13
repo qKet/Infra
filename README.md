@@ -3,17 +3,23 @@
 Qket 인프라의 Terraform 코드. root(디렉토리)는 apply 순서를 그대로 드러내는 숫자 접두사로 정렬돼 있다.
 
 ```
-01_infrastructure/   VPC, EKS, bastion — 순수 AWS API 리소스만
+00_network/            VPC, 서브넷, 보안그룹 — 전부 무료 리소스, 절대 안 지움(03_registry와 같은 성격)
+01_infrastructure/   EKS, bastion, NAT Gateway — 비용이 나가는 것만 남음, 순수 AWS API 리소스
 02_k8s-addon/         namespace, ArgoCD — kubernetes/helm provider로 EKS 위에 배포
 03_registry/          ECR, github-actions-oidc — 공유·불변, env 안 나뉨, 절대 안 지움
 04_data/               RDS, Redis, S3(포스터) — release/prod workspace로 분리, 절대 안 지움
 ```
 
-`argocd/qket-cd-app.yaml`은 Terraform root가 아니라 ArgoCD Application 매니페스트 — `qKet/CD` 레포의 `release` 경로를 `qket-release` 네임스페이스로 동기화하는 정의. `02_k8s-addon`이 설치한 ArgoCD가 뜬 뒤 이 매니페스트를 `kubectl apply`(또는 App-of-Apps로) 등록하면 됨.
+> `00_network`는 2026-08-13에 `01_infrastructure`에서 분리됨 — VPC/서브넷/보안그룹은 AWS 요금이 안 붙는 무료 리소스라 매일 밤 destroy할 이유가 없었고, 오히려 밤 시간대에 값이 없어서 `-refresh-only`가 깨지는 원인만 됐음. 이제 `01_infrastructure`는 `-target` 없이 통째로 destroy해도 안전함.
+
+ArgoCD Application(`qket-cd`, `qKet/CD` 레포의 `helm` 경로를 `qket-release` 네임스페이스로 동기화)은 2026-08-13부터 `02_k8s-addon/argocd-apps.tf`가 `kubectl_manifest`로 직접 만든다 — `02_k8s-addon` apply 한 번으로 ArgoCD 설치 + Application 등록까지 끝남. 예전엔 `argocd/qket-cd-app.yaml`을 사람이 매번 `kubectl apply`해야 했는데(02_k8s-addon이 매일 밤 destroy될 때 Application 등록도 같이 사라져서), 이제 그럴 필요 없음. sync는 여전히 수동(ArgoCD UI에서 Sync 버튼) — automated(prune/selfHeal)는 일부러 안 켬.
 
 ## 최초 적용 순서
 
 ```bash
+cd 00_network && terraform init
+cd 00_network && terraform apply
+
 cd 01_infrastructure && terraform init
 cd 01_infrastructure && terraform apply
 
@@ -38,7 +44,9 @@ cd 04_data && terraform apply
 
 ## 매일 아침/저녁 — `01_infrastructure`/`02_k8s-addon` 켜고 끄기
 
-`01_infrastructure`(EKS/bastion/NAT)는 비용 때문에 매일 껐다 켠다. **VPC/서브넷/라우팅테이블은 떠있어도 과금되지 않으므로 안 지운다** — 지우는 건 실제로 비용이 나가는 리소스(EKS, bastion EC2, NAT Gateway)뿐이다. `03_registry`(ECR/OIDC)는 애초에 별도 root라 이 과정과 무관하고, `04_data`(RDS/Redis/S3 등 실제 AWS 리소스)는 SG를 bastion SG ID가 아니라 서브넷 CIDR로만 참조하도록 되어 있어서 전혀 영향받지 않는다.
+`01_infrastructure`(EKS/bastion/NAT)는 비용 때문에 매일 껐다 켠다. `00_network`(VPC/서브넷/보안그룹)는 떠있어도 과금되지 않는 데다 아예 별도 root로 분리돼서 **이 과정에서 전혀 손대지 않는다** — `03_registry`(ECR/OIDC)와 마찬가지로 최초 1회 적용 이후로는 다시 볼 일이 없다. `04_data`(RDS/Redis/S3 등 실제 AWS 리소스)는 SG를 bastion SG ID가 아니라 서브넷 CIDR로만 참조하도록 되어 있어서 전혀 영향받지 않는다.
+
+> ⚠️ **`01_infrastructure`를 절대 `-target` 없이 plain `terraform destroy`로 지우지 말 것.** 이 root에 팀원이 아직 로컬에 없는 브랜치(예: 모니터링/AMP 관련 코드)의 리소스가 이미 배포돼 있는 상태에서 target 없이 destroy하면, 로컬 `.tf`에 없다는 이유로 **그 리소스까지 통째로 날아간다** — 특히 AMP(Amazon Managed Prometheus) workspace가 여기 해당되면 그동안 쌓인 지표 이력이 영구 삭제된다. 반드시 아래처럼 지울 리소스를 `-target`으로 명시할 것.
 
 **순서가 중요하다** — `02_k8s-addon`(ArgoCD/namespace)을 EKS Access Entry가 아직 살아있을 때 먼저 지워야 한다. 순서를 안 지키면 `Unauthorized` 에러가 난다(자세한 원인: `troubleshooting/eks-destroy-layer-separation.md`).
 
@@ -50,14 +58,15 @@ cd 04_data && terraform apply
 # 1. k8s-addon 전체 destroy (EKS가 아직 살아있을 때)
 cd 02_k8s-addon && terraform destroy
 
-# 2. infrastructure에서 비용 나가는 리소스만 targeted destroy
-#    (VPC/서브넷/라우팅은 손대지 않음)
+# 2. infrastructure destroy — 00_network로 옮겨간 vpc/subnet/security_group은
+#    이 root에 아예 없으니(-target 목록에서도 뺌) 신경 쓸 필요 없음.
+#    라우팅 테이블(aws_route_table.*)은 -target으로 명시 안 해도 nat_gateway를 참조하고
+#    있어서 destroy 시 자동으로 같이 정리됨(Terraform이 의존관계를 따라감).
 cd 01_infrastructure && terraform destroy \
   -target=module.eks \
   -target=module.ec2 \
   -target=aws_nat_gateway.this \
-  -target=aws_eip.nat \
-  -target=module.security_group
+  -target=aws_eip.nat
 ```
 
 ### 아침 — 켜기

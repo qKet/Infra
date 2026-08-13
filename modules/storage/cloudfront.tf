@@ -10,7 +10,7 @@ resource "aws_cloudfront_distribution" "posters" {
   enabled             = true
   comment             = "${var.project_name} 포스터 이미지 CDN (${var.environment})"
   default_root_object = ""
-  # 아시아(한국 포함) 엣지 포함 — 남미/호주 제외한 중간 요금제
+  # 아시아(한국 포함)
   price_class = "PriceClass_200"
 
   origin {

@@ -1,5 +1,5 @@
 module "eso_release" {
-  source = "../modules/eso"
+  source = "../modules/addons/eso"
 
   project_name = var.project_name
   environment  = "release"

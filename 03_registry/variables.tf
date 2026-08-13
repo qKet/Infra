@@ -24,3 +24,12 @@ variable "ecr_repository_name" {
   type        = string
   default     = "team5/ecr/qket"
 }
+
+/*******************
+*     SES (예매 오픈 알림)
+*******************/
+variable "ses_domain" {
+  description = "예매 오픈 알림 발신용 SES verify 도메인 — ECR/OIDC와 마찬가지로 release/prod 공용 싱글턴이라 여기 둠"
+  type        = string
+  default     = "jun979.click"
+}

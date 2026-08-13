@@ -165,7 +165,7 @@ resource "kubernetes_manifest" "backend_service_monitor" {
 locals {
   ingress_config = {
     release = {
-      host            = "dev.jun979.click" # dev 쪽 Route53 추가 필요
+      host            = "dev.jun979.click"
       certificate_arn = "arn:aws:acm:ap-northeast-2:727646470302:certificate/5e9cef50-c07b-4988-8317-88a1c5fa8e1c"
     }
     prod = {

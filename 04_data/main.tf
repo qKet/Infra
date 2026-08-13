@@ -26,8 +26,8 @@ locals {
       skip_final_snapshot         = true
       deletion_protection         = false
       redis_node_type             = "cache.t3.micro"
-      force_destroy               = true
-      secret_recovery_window_days = 0 # 바로 삭제 — 자주 재생성하는 샌드박스라 대기기간 있으면 이름 충돌 남
+      force_destroy               = false # 2026-08-13: release도 실수로 destroy할 때 안에 파일 있으면 막히게 — true였을 땐 포스터 이미지가 통째로 날아갈 수 있었음
+      secret_recovery_window_days = 0     # 바로 삭제 — 자주 재생성하는 샌드박스라 대기기간 있으면 이름 충돌 남
     }
     prod = {
       db_instance_class           = "db.t3.small"
@@ -61,7 +61,7 @@ locals {
 # 바뀌어서 data를 다시 apply해야 하는 문제가 있었음. CIDR은 infrastructure가 몇 번을 destroy/재생성돼도
 # 안 바뀌므로 data가 infrastructure 재생성에 전혀 영향받지 않음(단, 서브넷 CIDR 변수 자체를 바꾸면 예외).
 module "security_group" {
-  source = "../modules/addons/security_group"
+  source = "../modules/security_group"
 
   project_name = var.project_name
   vpc_id       = data.terraform_remote_state.infrastructure.outputs.vpc_id
@@ -95,7 +95,7 @@ module "security_group" {
 }
 
 module "rds" {
-  source = "../modules/addons/rds"
+  source = "../modules/rds"
 
   project_name = var.project_name
   environment  = local.environment
@@ -115,7 +115,7 @@ module "rds" {
 }
 
 module "redis" {
-  source = "../modules/addons/redis"
+  source = "../modules/redis"
 
   project_name = var.project_name
   environment  = local.environment
@@ -128,7 +128,7 @@ module "redis" {
 }
 
 module "storage" {
-  source = "../modules/addons/storage"
+  source = "../modules/storage"
 
   project_name = var.project_name
   environment  = local.environment
@@ -137,7 +137,8 @@ module "storage" {
   oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
 
-  force_destroy = local.env_config.force_destroy
+  force_destroy        = local.env_config.force_destroy
+  open_alert_queue_arn = module.open_alert_queue.queue_arn
 }
 
 # DB_PORT/DB_NAME/REDIS_PORT/AWS_REGION — 전부 사람이 GitHub Variables에 따로 입력할 필요 없이
@@ -149,10 +150,14 @@ resource "kubernetes_config_map" "app_config" {
   }
 
   data = {
-    DB_PORT    = tostring(module.rds.rds_port)
-    DB_NAME    = module.rds.rds_db_name
-    REDIS_PORT = tostring(module.redis.redis_port)
-    AWS_REGION = var.aws_region
+    DB_PORT              = tostring(module.rds.rds_port)
+    DB_NAME              = module.rds.rds_db_name
+    REDIS_PORT           = tostring(module.redis.redis_port)
+    AWS_REGION           = var.aws_region
+    # 개인 알림(회원가입 인증코드, 예매확정/취소 영수증) — module.messaging의 통합 큐, type 필드로 분기
+    NOTIFICATION_QUEUE_URL = module.messaging.queue_url
+    # 예매 오픈 알림 구독자 브로드캐스트 — module.cancel_alert_queue, 위와 별개 큐(다대다 발송이라 분리)
+    OPEN_ALERT_QUEUE_URL = module.open_alert_queue.queue_url
   }
 }
 
@@ -166,6 +171,27 @@ resource "kubernetes_config_map" "app_config" {
 # 순환 의존이 생김. 대신 namespace(qket-release/qket-prod)가 02_k8s-addon 소관이라 매일 밤 destroy될 때
 # 이 db-secrets/redis-secrets도 같이 사라지므로, IRSA ServiceAccount/ConfigMap과 마찬가지로 아침에
 # 이 root를 다시 apply해야 함 — 자세한 내용은 CLAUDE_LLM_WIKI의 daily-infrastructure-toggle 문서 참고.
+# 예매 오픈 알림 — 백엔드의 @Scheduled 스위퍼가 5분마다 publish, Lambda가 consume. rds/redis처럼
+# release/prod마다 따로 존재(운영 트래픽이 개발/스테이징 알림과 섞이면 안 되므로 큐도 여기서 workspace별로 나눔).
+module "open_alert_queue" {
+  source = "../modules/sqs"
+
+  project_name = var.project_name
+  environment  = local.environment
+}
+
+module "open_alert_mailer" {
+  source = "../modules/lambda"
+
+  project_name = var.project_name
+  environment  = local.environment
+  source_dir   = "${path.module}/../lambda/open-alert-mailer"
+
+  queue_arn        = module.open_alert_queue.queue_arn
+  ses_identity_arn = data.terraform_remote_state.registry.outputs.ses_identity_arn
+  from_email       = var.open_alert_from_email
+}
+
 module "eso" {
   source = "../modules/addons/eso"
 
@@ -183,4 +209,43 @@ module "eso" {
 
   secret_recovery_window_days = local.env_config.secret_recovery_window_days
   external_api_keys           = var.external_api_keys
+}
+
+# 알림 발송 파이프라인 — 회원가입 이메일 인증 + 예매확정/취소 알림을 모두 여기 큐 하나로 처리.
+# SQS(backend가 요청 넣음, type 필드로 종류 구분) → Lambda(type 보고 분기해서 SES로 발송).
+# release/prod 각자 큐/함수를 가짐(테스트 발송이 실제 서비스랑 안 섞이게). SES 도메인 인증 자체는
+# 03_registry에 있음(도메인당 한 번만 해야 해서 — modules/messaging/iam.tf 주석 참고).
+module "messaging" {
+  source = "../modules/messaging"
+
+  project_name = var.project_name
+  environment  = local.environment
+  aws_region   = var.aws_region
+  namespace    = "qket-${local.environment}"
+
+  from_email = "noreply@jun979.click"
+  ses_domain = "jun979.click"
+}
+
+# 백엔드가 알림 큐에 메시지를 넣을 권한(sqs:SendMessage) — Lambda 쪽 IAM(모듈 안, 큐 읽기+SES 발송)만
+# 만들어두고 이걸 빠뜨리면, 로컬에선 가짜 URL이라 InvalidAddressException으로 먼저 막혀서 못 잡아내지만
+# 실제 AWS에서는 백엔드가 SendMessage 호출 시 AccessDenied(403)로 조용히 실패함(코드가 예외를 삼키므로
+# 사용자는 "발송 실패"만 보고 원인은 CloudTrail/로그 봐야 알 수 있음) — 그래서 여기서 명시적으로 부여.
+# modules/storage에서 만든 백엔드 IRSA 역할(aws_iam_role.backend)에 정책만 추가로 붙이는 구조.
+data "aws_iam_policy_document" "backend_sqs" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "sqs:SendMessage",
+    ]
+    resources = [
+      module.messaging.queue_arn,
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "backend_sqs" {
+  name   = "${var.project_name}-backend-sqs-${local.environment}"
+  role   = module.storage.backend_role_name
+  policy = data.aws_iam_policy_document.backend_sqs.json
 }

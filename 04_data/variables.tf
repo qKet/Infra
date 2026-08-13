@@ -47,6 +47,15 @@ variable "redis_engine_version" {
 # gitignore된 .tfvars로 넘김(절대 이 파일이나 git에 평문으로 안 남게). module.eso 쪽
 # aws_secretsmanager_secret_version.external_api에 ignore_changes가 걸려있어서, 최초 1회만
 # 값을 넣으면 그 뒤로 04_data를 몇 번을 재적용해도(이 변수를 매번 안 넘겨도) 안 바뀜.
+/*******************
+*     예매 오픈 알림
+*******************/
+variable "open_alert_from_email" {
+  description = "예매 오픈 알림 메일 발신자 주소 — modules/ses.ses_domain(03_registry) 소속이어야 함"
+  type        = string
+  default     = "noreply@jun979.click"
+}
+
 variable "external_api_keys" {
   description = "토스/OAuth 등 외부 API 키 — 사람이 직접 발급받은 값"
   type = object({

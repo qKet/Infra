@@ -18,6 +18,10 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.0"
     }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = "~> 1.14"
+    }
   }
 }
 
@@ -59,5 +63,21 @@ provider "helm" {
       command     = "aws"
       args        = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.infrastructure.outputs.eks_cluster_name, "--region", var.aws_region, "--role-arn", data.terraform_remote_state.infrastructure.outputs.cluster_admin_role_arn]
     }
+  }
+}
+
+# kubectl_manifest용(ArgoCD Application) — kubernetes_manifest와 달리 plan 시점에 클러스터를
+# 라이브로 조회하지 않아서, ArgoCD 설치(helm_release.argocd가 Application CRD를 등록)와 그 위에
+# Application 오브젝트를 만드는 걸 한 번의 apply로 처리 가능. 04_data가 ESO의 SecretStore/
+# ExternalSecret에 쓰는 것과 완전히 같은 이유 — argocd-apps.tf 참고.
+provider "kubectl" {
+  host                   = data.terraform_remote_state.infrastructure.outputs.eks_cluster_endpoint
+  cluster_ca_certificate = base64decode(data.terraform_remote_state.infrastructure.outputs.eks_cluster_certificate_authority)
+  load_config_file       = false
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.infrastructure.outputs.eks_cluster_name, "--region", var.aws_region, "--role-arn", data.terraform_remote_state.infrastructure.outputs.cluster_admin_role_arn]
   }
 }

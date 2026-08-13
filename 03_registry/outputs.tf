@@ -32,3 +32,8 @@ output "amp_query_endpoint" {
   description = "Grafana가 AMP를 Prometheus 데이터소스로 조회할 때 쓸 엔드포인트"
   value       = aws_prometheus_workspace.this.prometheus_endpoint
 }
+
+output "ses_identity_arn" {
+  description = "예매 오픈 알림 발신 도메인 identity ARN — 04_data가 remote_state로 읽어서 Lambda 발송 권한에 씀"
+  value       = module.ses.identity_arn
+}
