@@ -12,13 +12,17 @@ resource "kubectl_manifest" "qket_cd_app" {
     apiVersion = "argoproj.io/v1alpha1"
     kind       = "Application"
     metadata = {
-      name      = "qket-cd"
-      namespace = "argocd"
-      # Application 자체를 지울 때 그 밑에서 관리하던 리소스(Deployment/Service/Ingress 등)까지
-      # cascade로 같이 지워지게 함 — 안 하면 Application만 사라지고 실제 리소스는 고아로 남음
-      # (ALB/SG 고아 사고와 같은 계열의 문제를 ArgoCD 레벨에서도 막기 위함).
-      finalizers = ["resources-finalizer.argocd.argoproj.io"]
-    }
+          name      = "qket-cd"
+          namespace = "argocd"
+          finalizers = ["resources-finalizer.argocd.argoproj.io"]
+          # ArgoCD Notifications 구독 — 02_k8s-addon(helm_release.argocd)에 정의된 트리거/이메일
+          # 서비스를 이 Application에 연결. 여러 명 추가할 땐 콤마로 구분: "a@x.com,b@x.com"
+          annotations = {
+            "notifications.argoproj.io/subscribe.on-out-of-sync.email"     = "zubene1013@gmail.com"
+            "notifications.argoproj.io/subscribe.on-sync-failed.email"     = "zubene1013@gmail.com"
+            "notifications.argoproj.io/subscribe.on-health-degraded.email" = "zubene1013@gmail.com"
+          }
+      }
     spec = {
       project = "default"
       source = {
