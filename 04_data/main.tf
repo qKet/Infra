@@ -26,7 +26,7 @@ locals {
       skip_final_snapshot         = true
       deletion_protection         = false
       redis_node_type             = "cache.t3.micro"
-      force_destroy               = true
+      force_destroy               = false # 2026-08-13: release도 실수로 destroy할 때 안에 파일 있으면 막히게 — true였을 땐 포스터 이미지가 통째로 날아갈 수 있었음
       secret_recovery_window_days = 0 # 바로 삭제 — 자주 재생성하는 샌드박스라 대기기간 있으면 이름 충돌 남
     }
     prod = {
@@ -167,7 +167,7 @@ resource "kubernetes_config_map" "app_config" {
 # 이 db-secrets/redis-secrets도 같이 사라지므로, IRSA ServiceAccount/ConfigMap과 마찬가지로 아침에
 # 이 root를 다시 apply해야 함 — 자세한 내용은 CLAUDE_LLM_WIKI의 daily-infrastructure-toggle 문서 참고.
 module "eso" {
-  source = "../modules/eso"
+  source = "../modules/addons/eso"
 
   project_name = var.project_name
   environment  = local.environment
@@ -183,4 +183,18 @@ module "eso" {
 
   secret_recovery_window_days = local.env_config.secret_recovery_window_days
   external_api_keys           = var.external_api_keys
+}
+
+# 이메일 인증번호 발송 — SQS(backend가 요청 넣음) → Lambda(SES로 발송). release/prod 각자
+# 큐/함수를 가짐(테스트 발송이 실제 서비스랑 안 섞이게). SES 도메인 인증 자체는 03_registry에
+# 있음(도메인당 한 번만 해야 해서 — modules/messaging/iam.tf 주석 참고).
+module "messaging" {
+  source = "../modules/messaging"
+
+  project_name = var.project_name
+  environment  = local.environment
+  aws_region   = var.aws_region
+
+  from_email = "noreply@jun979.click"
+  ses_domain = "jun979.click"
 }
