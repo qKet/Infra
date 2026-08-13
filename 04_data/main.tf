@@ -154,6 +154,9 @@ resource "kubernetes_config_map" "app_config" {
     DB_NAME              = module.rds.rds_db_name
     REDIS_PORT           = tostring(module.redis.redis_port)
     AWS_REGION           = var.aws_region
+    # 개인 알림(회원가입 인증코드, 예매확정/취소 영수증) — module.messaging의 통합 큐, type 필드로 분기
+    NOTIFICATION_QUEUE_URL = module.messaging.queue_url
+    # 예매 오픈 알림 구독자 브로드캐스트 — module.cancel_alert_queue, 위와 별개 큐(다대다 발송이라 분리)
     OPEN_ALERT_QUEUE_URL = module.open_alert_queue.queue_url
   }
 }
