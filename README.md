@@ -12,7 +12,7 @@ Qket 인프라의 Terraform 코드. root(디렉토리)는 apply 순서를 그대
 
 > `00_network`는 2026-08-13에 `01_infrastructure`에서 분리됨 — VPC/서브넷/보안그룹은 AWS 요금이 안 붙는 무료 리소스라 매일 밤 destroy할 이유가 없었고, 오히려 밤 시간대에 값이 없어서 `-refresh-only`가 깨지는 원인만 됐음. 이제 `01_infrastructure`는 `-target` 없이 통째로 destroy해도 안전함.
 
-`argocd/qket-cd-app.yaml`은 Terraform root가 아니라 ArgoCD Application 매니페스트 — `qKet/CD` 레포의 `release` 경로를 `qket-release` 네임스페이스로 동기화하는 정의. `02_k8s-addon`이 설치한 ArgoCD가 뜬 뒤 이 매니페스트를 `kubectl apply`(또는 App-of-Apps로) 등록하면 됨.
+ArgoCD Application(`qket-cd`, `qKet/CD` 레포의 `helm` 경로를 `qket-release` 네임스페이스로 동기화)은 2026-08-13부터 `02_k8s-addon/argocd-apps.tf`가 `kubectl_manifest`로 직접 만든다 — `02_k8s-addon` apply 한 번으로 ArgoCD 설치 + Application 등록까지 끝남. 예전엔 `argocd/qket-cd-app.yaml`을 사람이 매번 `kubectl apply`해야 했는데(02_k8s-addon이 매일 밤 destroy될 때 Application 등록도 같이 사라져서), 이제 그럴 필요 없음. sync는 여전히 수동(ArgoCD UI에서 Sync 버튼) — automated(prune/selfHeal)는 일부러 안 켬.
 
 ## 최초 적용 순서
 

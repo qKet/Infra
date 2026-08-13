@@ -27,7 +27,7 @@ locals {
       deletion_protection         = false
       redis_node_type             = "cache.t3.micro"
       force_destroy               = false # 2026-08-13: release도 실수로 destroy할 때 안에 파일 있으면 막히게 — true였을 땐 포스터 이미지가 통째로 날아갈 수 있었음
-      secret_recovery_window_days = 0 # 바로 삭제 — 자주 재생성하는 샌드박스라 대기기간 있으면 이름 충돌 남
+      secret_recovery_window_days = 0     # 바로 삭제 — 자주 재생성하는 샌드박스라 대기기간 있으면 이름 충돌 남
     }
     prod = {
       db_instance_class           = "db.t3.small"
@@ -150,10 +150,13 @@ resource "kubernetes_config_map" "app_config" {
   }
 
   data = {
-    DB_PORT                = tostring(module.rds.rds_port)
-    DB_NAME                = module.rds.rds_db_name
-    REDIS_PORT             = tostring(module.redis.redis_port)
-    AWS_REGION             = var.aws_region
+    DB_PORT    = tostring(module.rds.rds_port)
+    DB_NAME    = module.rds.rds_db_name
+    REDIS_PORT = tostring(module.redis.redis_port)
+    AWS_REGION = var.aws_region
+    # 개인 알림(회원가입 인증코드, 예매확정/취소 영수증) — module.messaging의 통합 큐, type 필드로 분기
+    NOTIFICATION_QUEUE_URL = module.messaging.queue_url
+    # 취소표 알림 구독자 브로드캐스트 — module.cancel_alert_queue, 위와 별개 큐(다대다 발송이라 분리)
     CANCEL_ALERT_QUEUE_URL = module.cancel_alert_queue.queue_url
   }
 }
