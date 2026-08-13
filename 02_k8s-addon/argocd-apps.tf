@@ -30,6 +30,20 @@ resource "kubectl_manifest" "qket_cd_app" {
         server    = "https://kubernetes.default.svc"
         namespace = "qket-release"
       }
+      # KEDA(ScaledObject, CD 레포)가 qket-backend Deployment의 replicas를 실시간으로 바꾸는데,
+      # ArgoCD가 sync할 때마다 git에 적힌 고정값(backend.replicas)으로 되돌리면 KEDA랑 계속
+      # 충돌함(scale-up 해놓으면 다음 sync에 다시 줄어듦). replicas 필드만 ArgoCD가 diff/sync
+      # 대상에서 빼서, "몇 개로 띄울지"는 KEDA한테 완전히 맡김 — ArgoCD 공식 문서에 나온
+      # HPA/KEDA 연동 시 권장 패턴.
+      ignoreDifferences = [
+        {
+          group        = "apps"
+          kind         = "Deployment"
+          name         = "qket-backend"
+          namespace    = "qket-release"
+          jsonPointers = ["/spec/replicas"]
+        }
+      ]
       # automated(prune/selfHeal)는 일부러 안 씀 — 배포는 수동 Sync로 직접 트리거하는 방식을 유지하기로 함.
       # 대신 재시도/네임스페이스/finalizer 같은, 수동 sync와 무관하게 유용한 설정은 그대로 둠.
       syncPolicy = {
