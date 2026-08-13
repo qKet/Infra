@@ -41,7 +41,7 @@ variable "eks_version" {
 variable "node_instance_types" {
   description = "노드그룹 EC2 인스턴스 타입"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.xlarge"]
 }
 
 variable "node_desired_size" {

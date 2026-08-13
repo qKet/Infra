@@ -110,6 +110,7 @@ module "monitoring" {
   depends_on = [module.alb_controller]
 }
 
+
 # Grafana 대시보드 정의를 git에 저장 — EKS를 destroy/재생성해도 module.monitoring만 다시
 # apply하면 대시보드가 자동으로 돌아옴(module.monitoring의 sidecar.dashboards 설정이 이
 # ConfigMap을 grafana_dashboard=1 라벨로 찾아서 자동 로드). JSON은 Grafana UI의 dashboard
@@ -154,6 +155,14 @@ resource "kubernetes_manifest" "backend_service_monitor" {
   }
 
   depends_on = [module.monitoring]
+}
+
+# KEDA — backend 오토스케일링용. 실제 스케일 규칙(ScaledObject)은 CD 레포(Helm)에 있고,
+# 여기는 그 규칙을 처리할 컨트롤러(엔진)만 설치. modules/addons/keda/main.tf 주석 참고.
+module "keda" {
+  source = "../modules/addons/keda"
+
+  depends_on = [module.alb_controller]
 }
 
 # 환경별 Ingress 설정 — 원래 CD/helm/templates/ingress.yaml(ArgoCD가 배포)이 갖고 있었는데,
