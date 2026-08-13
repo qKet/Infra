@@ -1,12 +1,12 @@
 module "vpc" {
-  source = "../modules/vpc"
+  source = "../modules/addons/vpc"
 
   project_name = var.project_name
   vpc_cidr     = var.vpc_cidr
 }
 
 module "subnet" {
-  source = "../modules/subnet"
+  source = "../modules/addons/subnet"
 
   project_name = var.project_name
   vpc_id       = module.vpc.vpc_id
@@ -104,7 +104,7 @@ resource "aws_route_table_association" "private_data" {
 # bastion 보안그룹만 여기서 생성 (rds/redis 보안그룹은 data root에서 환경별로 생성).
 # 인바운드 규칙 없음 — SSM은 인스턴스가 AWS로 나가는 방향으로만 연결하므로 열 포트가 없음.
 module "security_group" {
-  source = "../modules/security_group"
+  source = "../modules/addons/security_group"
 
   project_name = var.project_name
   vpc_id       = module.vpc.vpc_id
@@ -117,7 +117,7 @@ module "security_group" {
 }
 
 module "eks" {
-  source = "../modules/eks"
+  source = "../modules/addons/eks"
 
   project_name = var.project_name
   eks_version  = var.eks_version
@@ -132,7 +132,7 @@ module "eks" {
 }
 
 module "ec2" {
-  source = "../modules/ec2"
+  source = "../modules/addons/ec2"
 
   project_name = var.project_name
   subnet_id    = module.subnet.private_general_subnet_ids[0]
