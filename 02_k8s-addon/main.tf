@@ -58,7 +58,7 @@ resource "helm_release" "argocd" {
 # destroy)이 EKS가 살아있는 동안 먼저 끝나야 함. 그래서 01_infrastructure가 아니라 여기(Layer 2,
 # k8s-addon)에 둠 — 자세한 이유는 CLAUDE_LLM_WIKI의 eks-destroy-layer-separation 문서 참고.
 module "alb_controller" {
-  source = "../modules/alb-controller"
+  source = "../modules/addons/alb-controller"
 
   project_name = var.project_name
   aws_region   = var.aws_region
@@ -76,7 +76,7 @@ module "alb_controller" {
 # 자기 Service를 만들 수 있어서, ALB Controller의 webhook이 아직 준비 안 된 타이밍에 걸리면
 # 같은 "no endpoints available" 에러가 날 수 있음. 방어적으로 동일하게 걸어둠.
 module "external_dns" {
-  source = "../modules/external-dns"
+  source = "../modules/addons/external-dns"
 
   project_name = var.project_name
   aws_region   = var.aws_region
@@ -95,7 +95,7 @@ module "external_dns" {
 # depends_on = [module.alb_controller] — external_dns와 같은 이유(위 주석 참고): Prometheus/
 # Grafana/Alertmanager/node-exporter가 전부 자기 Service를 만들어서 같은 webhook 레이스 위험이 있음.
 module "monitoring" {
-  source = "../modules/monitoring"
+  source = "../modules/addons/monitoring"
 
   project_name = var.project_name
   aws_region   = var.aws_region

@@ -19,28 +19,14 @@ variable "aws_region" {
 /*******************
 *     NetWork
 *******************/
-variable "vpc_cidr" {
-  description = "VPC CIDR 대역"
-  type        = string
-  default     = "10.70.0.0/16"
-}
-
+# vpc_cidr/public_subnet_cidrs/private_subnet_cidrs는 2026-08-13에 00_network로 옮겨감(vpc/subnet
+# 모듈이 실제로 쓰는 값들이라 여기 남길 이유가 없음). azs는 NAT Gateway/라우팅 테이블 count에
+# 여전히 쓰여서 남겨둠 — 00_network/variables.tf에도 같은 값(default)이 중복으로 있음, 서로 다른
+# root라 변수 공유가 안 되니 두 곳 다 값을 바꿔야 함(가용영역을 실제로 바꿀 일은 거의 없음).
 variable "azs" {
   description = "가용영역 목록"
   type        = list(string)
   default     = ["ap-northeast-2a", "ap-northeast-2b"]
-}
-
-variable "public_subnet_cidrs" {
-  description = "퍼블릭 서브넷 CIDR 목록 — AZ당 1개, azs와 순서 1:1 대응"
-  type        = list(string)
-  default     = ["10.70.1.0/24", "10.70.4.0/24"]
-}
-
-variable "private_subnet_cidrs" {
-  description = "프라이빗 서브넷 CIDR 목록 — AZ당 2개씩, azs 순서대로 [a-1, a-2, b-1, b-2] 배치"
-  type        = list(string)
-  default     = ["10.70.2.0/24", "10.70.3.0/24", "10.70.5.0/24", "10.70.6.0/24"]
 }
 
 /*******************
