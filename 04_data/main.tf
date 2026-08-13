@@ -26,8 +26,8 @@ locals {
       skip_final_snapshot         = true
       deletion_protection         = false
       redis_node_type             = "cache.t3.micro"
-      force_destroy               = true
-      secret_recovery_window_days = 0 # 바로 삭제 — 자주 재생성하는 샌드박스라 대기기간 있으면 이름 충돌 남
+      force_destroy               = false # 2026-08-13: release도 실수로 destroy할 때 안에 파일 있으면 막히게 — true였을 땐 포스터 이미지가 통째로 날아갈 수 있었음
+      secret_recovery_window_days = 0     # 바로 삭제 — 자주 재생성하는 샌드박스라 대기기간 있으면 이름 충돌 남
     }
     prod = {
       db_instance_class           = "db.t3.small"
@@ -190,7 +190,7 @@ module "open_alert_mailer" {
 }
 
 module "eso" {
-  source = "../modules/eso"
+  source = "../modules/addons/eso"
 
   project_name = var.project_name
   environment  = local.environment
@@ -206,4 +206,43 @@ module "eso" {
 
   secret_recovery_window_days = local.env_config.secret_recovery_window_days
   external_api_keys           = var.external_api_keys
+}
+
+# 알림 발송 파이프라인 — 회원가입 이메일 인증 + 예매확정/취소 알림을 모두 여기 큐 하나로 처리.
+# SQS(backend가 요청 넣음, type 필드로 종류 구분) → Lambda(type 보고 분기해서 SES로 발송).
+# release/prod 각자 큐/함수를 가짐(테스트 발송이 실제 서비스랑 안 섞이게). SES 도메인 인증 자체는
+# 03_registry에 있음(도메인당 한 번만 해야 해서 — modules/messaging/iam.tf 주석 참고).
+module "messaging" {
+  source = "../modules/messaging"
+
+  project_name = var.project_name
+  environment  = local.environment
+  aws_region   = var.aws_region
+  namespace    = "qket-${local.environment}"
+
+  from_email = "noreply@jun979.click"
+  ses_domain = "jun979.click"
+}
+
+# 백엔드가 알림 큐에 메시지를 넣을 권한(sqs:SendMessage) — Lambda 쪽 IAM(모듈 안, 큐 읽기+SES 발송)만
+# 만들어두고 이걸 빠뜨리면, 로컬에선 가짜 URL이라 InvalidAddressException으로 먼저 막혀서 못 잡아내지만
+# 실제 AWS에서는 백엔드가 SendMessage 호출 시 AccessDenied(403)로 조용히 실패함(코드가 예외를 삼키므로
+# 사용자는 "발송 실패"만 보고 원인은 CloudTrail/로그 봐야 알 수 있음) — 그래서 여기서 명시적으로 부여.
+# modules/storage에서 만든 백엔드 IRSA 역할(aws_iam_role.backend)에 정책만 추가로 붙이는 구조.
+data "aws_iam_policy_document" "backend_sqs" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "sqs:SendMessage",
+    ]
+    resources = [
+      module.messaging.queue_arn,
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "backend_sqs" {
+  name   = "${var.project_name}-backend-sqs-${local.environment}"
+  role   = module.storage.backend_role_name
+  policy = data.aws_iam_policy_document.backend_sqs.json
 }

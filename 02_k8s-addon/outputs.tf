@@ -17,3 +17,8 @@ output "external_dns_role_arn" {
   description = "ExternalDNS IRSA IAM 역할 ARN"
   value       = module.external_dns.role_arn
 }
+
+output "grafana_role_arn" {
+  description = "Grafana IRSA IAM 역할 ARN (CloudWatch 읽기 전용)"
+  value       = module.monitoring.grafana_role_arn
+}

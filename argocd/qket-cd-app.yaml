@@ -7,6 +7,11 @@ kind: Application
 metadata:
   name: qket-cd
   namespace: argocd
+  # Application 자체를 지울 때(kubectl delete) 그 밑에서 관리하던 리소스(Deployment/Service/Ingress
+  # 등)까지 cascade로 같이 지워지게 함 — 이게 없으면 Application만 사라지고 실제 리소스는 고아로
+  # 남는다(이번 세션에 겪은 ALB/SG 고아 사고와 같은 계열의 문제를 ArgoCD 레벨에서도 막기 위함).
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
@@ -16,4 +21,14 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: qket-release
-  syncPolicy: { }
+  # automated(prune/selfHeal)는 일부러 안 씀 — 배포는 수동 Sync로 직접 트리거하는 방식을 유지하기로 함.
+  # 대신 재시도/네임스페이스/finalizer 같은, 수동 sync와 무관하게 유용한 설정은 그대로 둠.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false # qket-release 네임스페이스는 01_infrastructure가 이미 만듦 — ArgoCD가 중복 소유하지 않게
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
