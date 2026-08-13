@@ -976,11 +976,16 @@
             "type": "cloudwatch",
             "uid": "P034F075C744B399F"
           },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "a",
           "namespace": "AWS/ElastiCache",
           "metricName": "CPUUtilization",
           "dimensions": {
             "CacheClusterId": "team5-qket-redis-release"
           },
+          "matchExact": true,
           "statistic": "Average",
           "region": "ap-northeast-2",
           "refId": "A"
@@ -990,11 +995,16 @@
             "type": "cloudwatch",
             "uid": "P034F075C744B399F"
           },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "b",
           "namespace": "AWS/ElastiCache",
           "metricName": "DatabaseMemoryUsagePercentage",
           "dimensions": {
             "CacheClusterId": "team5-qket-redis-release"
           },
+          "matchExact": true,
           "statistic": "Average",
           "region": "ap-northeast-2",
           "refId": "B"
@@ -1096,11 +1106,16 @@
             "type": "cloudwatch",
             "uid": "P034F075C744B399F"
           },
+          "queryMode": "Metrics",
+          "metricQueryType": 0,
+          "metricEditorMode": 0,
+          "id": "a",
           "namespace": "AWS/ElastiCache",
           "metricName": "CurrConnections",
           "dimensions": {
             "CacheClusterId": "team5-qket-redis-release"
           },
+          "matchExact": true,
           "statistic": "Average",
           "region": "ap-northeast-2",
           "refId": "A"
@@ -1133,5 +1148,5 @@
   },
   "timezone": "browser",
   "title": "qket",
-  "version": 11
+  "version": 12
 }
