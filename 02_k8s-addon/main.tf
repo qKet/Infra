@@ -103,7 +103,57 @@ module "monitoring" {
   oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
 
+  amp_remote_write_endpoint = data.terraform_remote_state.registry.outputs.amp_remote_write_endpoint
+  amp_workspace_arn         = data.terraform_remote_state.registry.outputs.amp_workspace_arn
+  amp_query_endpoint        = data.terraform_remote_state.registry.outputs.amp_query_endpoint
+
   depends_on = [module.alb_controller]
+}
+
+# Grafana 대시보드 정의를 git에 저장 — EKS를 destroy/재생성해도 module.monitoring만 다시
+# apply하면 대시보드가 자동으로 돌아옴(module.monitoring의 sidecar.dashboards 설정이 이
+# ConfigMap을 grafana_dashboard=1 라벨로 찾아서 자동 로드). JSON은 Grafana UI의 dashboard
+# settings > JSON Model에서 export한 것을 그대로 커밋해두면 됨.
+resource "kubernetes_config_map" "grafana_dashboards" {
+  metadata {
+    name      = "qket-grafana-dashboards"
+    namespace = "monitoring"
+    labels = {
+      grafana_dashboard = "1"
+    }
+  }
+
+  data = {
+    "qket-monitoring.json" = file("${path.module}/dashboards/qket-monitoring.json")
+  }
+
+  depends_on = [module.monitoring]
+}
+
+# backend API 지표(응답시간, 요청수, HikariCP, JVM 등)를 Prometheus가 스크랩하게 등록.
+# wiki decisions/2026-08-11-monitoring-stack-design 문서상 "2차(나중)" 범위였던 앱 레벨 지표 —
+# release 환경만 우선 커버. backend Service(qket-backend-service)에 포트 이름이 없어서
+# port(이름) 대신 targetPort(번호)로 참조함 — Service에 `name: http`를 붙이면 더 표준적인
+# port 참조로 바꿀 수 있음.
+resource "kubernetes_manifest" "backend_service_monitor" {
+  manifest = {
+    apiVersion = "monitoring.coreos.com/v1"
+    kind       = "ServiceMonitor"
+    metadata = {
+      name      = "qket-backend"
+      namespace = "monitoring"
+      labels    = { release = "monitoring" }
+    }
+    spec = {
+      namespaceSelector = { matchNames = ["qket-release"] }
+      selector           = { matchLabels = { app = "qket-backend" } }
+      endpoints = [
+        { targetPort = 8080, path = "/api/actuator/prometheus", interval = "15s" }
+      ]
+    }
+  }
+
+  depends_on = [module.monitoring]
 }
 
 # 환경별 Ingress 설정 — 원래 CD/helm/templates/ingress.yaml(ArgoCD가 배포)이 갖고 있었는데,

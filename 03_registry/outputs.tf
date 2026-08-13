@@ -18,6 +18,21 @@ output "github_actions_role_arns" {
   value       = module.github_actions_oidc.role_arns
 }
 
+output "amp_workspace_arn" {
+  description = "AMP workspace ARN — Grafana 쿼리 권한(IAM policy resource)에 사용"
+  value       = aws_prometheus_workspace.this.arn
+}
+
+output "amp_remote_write_endpoint" {
+  description = "Prometheus remoteWrite 설정에 넣을 AMP 엔드포인트 (module.monitoring values용)"
+  value       = "${aws_prometheus_workspace.this.prometheus_endpoint}api/v1/remote_write"
+}
+
+output "amp_query_endpoint" {
+  description = "Grafana가 AMP를 Prometheus 데이터소스로 조회할 때 쓸 엔드포인트"
+  value       = aws_prometheus_workspace.this.prometheus_endpoint
+}
+
 output "ses_identity_arn" {
   description = "예매 오픈 알림 발신 도메인 identity ARN — 04_data가 remote_state로 읽어서 Lambda 발송 권한에 씀"
   value       = module.ses.identity_arn
