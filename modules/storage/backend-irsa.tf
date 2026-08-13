@@ -43,6 +43,22 @@ resource "aws_iam_role_policy" "backend_s3" {
   policy = data.aws_iam_policy_document.backend_s3.json
 }
 
+# NOTI01_ALERT01(취소표 알림) — 딱 이 큐에 SendMessage만. 실제 발송(SES)은 이 큐를 구독하는
+# Lambda(modules/lambda) 쪽 권한이라 backend는 publish 권한만 있으면 됨 (S3 정책과 같은 최소 권한 원칙)
+data "aws_iam_policy_document" "backend_sqs" {
+  statement {
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = [var.cancel_alert_queue_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "backend_sqs" {
+  name   = "${var.project_name}-backend-sqs-${var.environment}"
+  role   = aws_iam_role.backend.id
+  policy = data.aws_iam_policy_document.backend_sqs.json
+}
+
 resource "kubernetes_service_account" "backend" {
   metadata {
     name      = "qket-backend"
