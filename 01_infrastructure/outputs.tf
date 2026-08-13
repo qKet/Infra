@@ -113,26 +113,6 @@ output "cluster_admin_role_arn" {
   value       = module.eks.cluster_admin_role_arn
 }
 
-output "amp_remote_write_endpoint" {
-  description = "Prometheus remoteWrite 설정에 넣을 AMP 엔드포인트 (module.monitoring values용)"
-  value       = "${aws_prometheus_workspace.this.prometheus_endpoint}api/v1/remote_write"
-}
-
-output "amp_query_endpoint" {
-  description = "Grafana가 AMP를 Prometheus 데이터소스로 조회할 때 쓸 엔드포인트"
-  value       = aws_prometheus_workspace.this.prometheus_endpoint
-}
-
-output "prometheus_irsa_role_arn" {
-  description = "Prometheus ServiceAccount에 붙일 IRSA Role ARN (AMP remote_write용)"
-  value       = module.irsa.role_arns["prometheus-amp"]
-}
-
-output "amp_workspace_arn" {
-  description = "AMP workspace ARN — Grafana 쿼리 권한(IAM policy resource)에 사용"
-  value       = aws_prometheus_workspace.this.arn
-}
-
 output "cluster_admins_group_name" {
   description = "이 IAM 그룹에 팀원을 추가하면 클러스터 admin 접근 가능 (콘솔/CLI에서 직접, terraform 안 건드림)"
   value       = module.eks.cluster_admins_group_name
