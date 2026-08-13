@@ -30,6 +30,7 @@ provider "registry.terraform.io/hashicorp/archive" {
   constraints = "~> 2.4"
   hashes = [
     "h1:WB6H5ksIZiyq1lQlD/PWeh+tn4FLsbSjVnRW3+4xe2Y=",
+    "h1:mhVBtd0G63hS4yVLA6F8IMX3YTbJUY+y5ulKpD+42Qk=",
     "zh:0d14713fdc259fb377d0b899ad3c650a34194bd52194c863303ef22a65a580e2",
     "zh:369b56040c7a8085d04e7e8ffac1e2b321a3170e502f788819bc34b868ec016f",
     "zh:4d1a3b983ed6af5a52bfe12794674ae55cbadfa6021b37106ade68b433ad216a",

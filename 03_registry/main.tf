@@ -32,7 +32,7 @@ module "github_actions_oidc" {
   }
 }
 
-# NOTI01_ALERT01(취소표 알림) 발신 도메인. release/prod 구분 없는 도메인 단위 리소스라 ECR/OIDC와
+# 예매 오픈 알림 발신 도메인. release/prod 구분 없는 도메인 단위 리소스라 ECR/OIDC와
 # 같은 이유로 여기 둠(04_data는 workspace별로 두 번 생기는 구조라 안 맞음). 반드시 import 먼저 — modules/ses/main.tf 상단 주석 참고.
 module "ses" {
   source = "../modules/ses"
