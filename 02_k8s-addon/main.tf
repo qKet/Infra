@@ -147,7 +147,7 @@ resource "kubernetes_manifest" "backend_service_monitor" {
     }
     spec = {
       namespaceSelector = { matchNames = ["qket-release"] }
-      selector           = { matchLabels = { app = "qket-backend" } }
+      selector          = { matchLabels = { app = "qket-backend" } }
       endpoints = [
         { targetPort = 8080, path = "/api/actuator/prometheus", interval = "15s" }
       ]
@@ -161,6 +161,15 @@ resource "kubernetes_manifest" "backend_service_monitor" {
 # 여기는 그 규칙을 처리할 컨트롤러(엔진)만 설치. modules/addons/keda/main.tf 주석 참고.
 module "keda" {
   source = "../modules/addons/keda"
+
+  depends_on = [module.alb_controller]
+}
+
+# metrics-server — KEDA(cpu trigger)가 만드는 HPA가 CPU 사용률을 읽으려면 이게 반드시 있어야 함.
+# 이게 없으면 HPA가 "unknown"으로 멈춰서 ScaledObject를 아무리 만들어도 절대 스케일 안 됨 —
+# 2026-08-13 부하테스트에서 4개 replica가 끝까지 안 늘어난 원인이 이거였음(modules/addons/metrics-server 참고).
+module "metrics_server" {
+  source = "../modules/addons/metrics-server"
 
   depends_on = [module.alb_controller]
 }
