@@ -13,11 +13,6 @@ variable "aws_region" {
   type        = string
 }
 
-variable "namespace" {
-  description = "큐 URL을 전달할 ConfigMap을 생성할 쿠버네티스 네임스페이스"
-  type        = string
-}
-
 variable "from_email" {
   description = "SES 발신자 주소 — ses_domain에 속한 주소여야 함(예: noreply@jun979.click)"
   type        = string

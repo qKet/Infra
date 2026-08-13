@@ -221,7 +221,6 @@ module "messaging" {
   project_name = var.project_name
   environment  = local.environment
   aws_region   = var.aws_region
-  namespace    = "qket-${local.environment}"
 
   from_email = "noreply@jun979.click"
   ses_domain = "jun979.click"
@@ -244,8 +243,11 @@ data "aws_iam_policy_document" "backend_sqs" {
   }
 }
 
+# name에 "messaging"을 붙인 이유: modules/storage/backend-irsa.tf에도 같은 백엔드 역할에 붙는
+# backend_sqs 정책이 하나 더 있음(오픈알림 큐용). 둘 다 이름이 같으면 인라인 정책은 (역할, 이름)이
+# 곧 식별자라 나중에 apply한 쪽이 먼저 것을 덮어써버림 — 실제로 겹쳤던 적이 있어서 접미사로 구분함.
 resource "aws_iam_role_policy" "backend_sqs" {
-  name   = "${var.project_name}-backend-sqs-${local.environment}"
+  name   = "${var.project_name}-backend-sqs-messaging-${local.environment}"
   role   = module.storage.backend_role_name
   policy = data.aws_iam_policy_document.backend_sqs.json
 }
