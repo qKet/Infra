@@ -60,3 +60,15 @@ variable "deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "storage_encrypted" {
+  description = <<-EOT
+    저장 암호화(KMS) 여부 — 기본 true로 새로 만드는 인스턴스는 항상 암호화됨.
+    주의: 이미 떠 있는 미암호화 인스턴스에 이 값을 true로 바꾸면 AWS 제약상 in-place 변경이
+    안 되어 Terraform이 destroy 후 재생성으로 처리함 — skip_final_snapshot=true인 환경(release)은
+    스냅샷 없이 바로 삭제되므로 데이터가 통째로 날아감. 반드시 스냅샷 생성 → 새 인스턴스로
+    복원(snapshot restore) 절차를 먼저 밟고 나서 이 값을 켤 것.
+  EOT
+  type        = bool
+  default     = true
+}

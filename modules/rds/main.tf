@@ -19,6 +19,9 @@ resource "aws_db_instance" "this" {
   allocated_storage     = var.db_allocated_storage
   max_allocated_storage = var.db_max_allocated_storage
   storage_type          = "gp3"
+  # 기존 미암호화 인스턴스가 있는 상태에서 이 값을 켜면 destroy+재생성이 발생함 —
+  # variables.tf의 storage_encrypted 설명 참고. 반드시 스냅샷 복원 절차로 전환할 것.
+  storage_encrypted = var.storage_encrypted
 
   db_name  = var.db_name
   username = var.db_username

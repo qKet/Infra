@@ -983,7 +983,7 @@
           "namespace": "AWS/ElastiCache",
           "metricName": "CPUUtilization",
           "dimensions": {
-            "CacheClusterId": "team5-qket-redis-release"
+            "CacheClusterId": "team5-qket-redis-release-001"
           },
           "matchExact": true,
           "statistic": "Average",
@@ -1002,7 +1002,7 @@
           "namespace": "AWS/ElastiCache",
           "metricName": "DatabaseMemoryUsagePercentage",
           "dimensions": {
-            "CacheClusterId": "team5-qket-redis-release"
+            "CacheClusterId": "team5-qket-redis-release-001"
           },
           "matchExact": true,
           "statistic": "Average",
@@ -1113,7 +1113,7 @@
           "namespace": "AWS/ElastiCache",
           "metricName": "CurrConnections",
           "dimensions": {
-            "CacheClusterId": "team5-qket-redis-release"
+            "CacheClusterId": "team5-qket-redis-release-001"
           },
           "matchExact": true,
           "statistic": "Average",

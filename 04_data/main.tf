@@ -117,6 +117,12 @@ module "rds" {
   multi_az            = local.env_config.multi_az
   skip_final_snapshot = local.env_config.skip_final_snapshot
   deletion_protection = local.env_config.deletion_protection
+
+  # TODO(2026-08-18): 라이브 RDS(release/prod 둘 다)가 현재 미암호화 상태라 임시로 false 고정.
+  # modules/rds/variables.tf의 storage_encrypted 기본값(true)을 그대로 뒀다간 다음 plan에서
+  # 바로 destroy+재생성이 뜸 — 반드시 스냅샷 생성 → 암호화 옵션으로 스냅샷 복원 →
+  # terraform import로 새 인스턴스를 state에 연결하는 절차를 밟은 뒤 이 줄을 지울 것.
+  storage_encrypted = false
 }
 
 module "redis" {
