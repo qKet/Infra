@@ -3,6 +3,35 @@ variable "project_name" {
   type        = string
 }
 
+variable "name" {
+  description = "Lambda 용도를 나타내는 이름 — 리소스 이름에 project_name 다음으로 들어감 (예: open-alert-mailer, email-verification)"
+  type        = string
+}
+
+variable "runtime" {
+  description = "Lambda 런타임 — nodejs22.x는 aws-sdk(SES 클라이언트 포함)가 기본 번들되어 있어 그대로 배포 가능. nodejs20.x 이하로 내리면 source_dir에 node_modules를 직접 담아야 함"
+  type        = string
+  default     = "nodejs22.x"
+}
+
+variable "timeout" {
+  description = "Lambda 타임아웃(초)"
+  type        = number
+  default     = 10
+}
+
+variable "batch_size" {
+  description = "SQS 이벤트소스 매핑 배치 크기"
+  type        = number
+  default     = 10
+}
+
+variable "report_batch_item_failures" {
+  description = "배치 부분 실패 재시도(ReportBatchItemFailures) 사용 여부 — 핸들러가 { batchItemFailures } 형태로 응답해야 함"
+  type        = bool
+  default     = true
+}
+
 variable "environment" {
   description = "release/prod — 04_data workspace 값 그대로 전달받음"
   type        = string
