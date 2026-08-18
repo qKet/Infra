@@ -3,6 +3,11 @@ variable "project_name" {
   type        = string
 }
 
+variable "name" {
+  description = "큐 용도를 나타내는 이름 — 리소스 이름에 project_name 다음으로 들어감 (예: open-alert, email-verification)"
+  type        = string
+}
+
 variable "environment" {
   description = "release/prod — 04_data workspace 값 그대로 전달받음"
   type        = string

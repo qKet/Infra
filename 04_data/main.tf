@@ -137,8 +137,7 @@ module "storage" {
   oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
 
-  force_destroy        = local.env_config.force_destroy
-  open_alert_queue_arn = module.open_alert_queue.queue_arn
+  force_destroy = local.env_config.force_destroy
 }
 
 # DB_PORT/DB_NAME/REDIS_PORT/AWS_REGION — 전부 사람이 GitHub Variables에 따로 입력할 필요 없이
@@ -150,13 +149,13 @@ resource "kubernetes_config_map" "app_config" {
   }
 
   data = {
-    DB_PORT              = tostring(module.rds.rds_port)
-    DB_NAME              = module.rds.rds_db_name
-    REDIS_PORT           = tostring(module.redis.redis_port)
-    AWS_REGION           = var.aws_region
-    # 개인 알림(회원가입 인증코드, 예매확정/취소 영수증) — module.messaging의 통합 큐, type 필드로 분기
-    NOTIFICATION_QUEUE_URL = module.messaging.queue_url
-    # 예매 오픈 알림 구독자 브로드캐스트 — module.cancel_alert_queue, 위와 별개 큐(다대다 발송이라 분리)
+    DB_PORT    = tostring(module.rds.rds_port)
+    DB_NAME    = module.rds.rds_db_name
+    REDIS_PORT = tostring(module.redis.redis_port)
+    AWS_REGION = var.aws_region
+    # 개인 알림(회원가입 인증코드, 예매확정/취소 영수증) — module.notification_queue의 통합 큐, type 필드로 분기
+    NOTIFICATION_QUEUE_URL = module.notification_queue.queue_url
+    # 예매 오픈 알림 구독자 브로드캐스트 — module.open_alert_queue, 위와 별개 큐(다대다 발송이라 분리)
     OPEN_ALERT_QUEUE_URL = module.open_alert_queue.queue_url
   }
 }
@@ -176,6 +175,7 @@ resource "kubernetes_config_map" "app_config" {
 module "open_alert_queue" {
   source = "../modules/sqs"
 
+  name         = "open-alert"
   project_name = var.project_name
   environment  = local.environment
 }
@@ -183,13 +183,14 @@ module "open_alert_queue" {
 module "open_alert_mailer" {
   source = "../modules/lambda"
 
+  name         = "open-alert-mailer"
   project_name = var.project_name
   environment  = local.environment
   source_dir   = "${path.module}/../lambda/open-alert-mailer"
 
-  queue_arn        = module.open_alert_queue.queue_arn
-  ses_identity_arn = data.terraform_remote_state.registry.outputs.ses_identity_arn
-  from_email       = var.open_alert_from_email
+  queue_arn  = module.open_alert_queue.queue_arn
+  ses_domain = "jun979.click"
+  from_email = var.open_alert_from_email
 }
 
 module "eso" {
@@ -214,24 +215,65 @@ module "eso" {
 # 알림 발송 파이프라인 — 회원가입 이메일 인증 + 예매확정/취소 알림을 모두 여기 큐 하나로 처리.
 # SQS(backend가 요청 넣음, type 필드로 종류 구분) → Lambda(type 보고 분기해서 SES로 발송).
 # release/prod 각자 큐/함수를 가짐(테스트 발송이 실제 서비스랑 안 섞이게). SES 도메인 인증 자체는
-# 03_registry에 있음(도메인당 한 번만 해야 해서 — modules/messaging/iam.tf 주석 참고).
-module "messaging" {
-  source = "../modules/messaging"
+# 03_registry에 있음(도메인당 한 번만 해야 해서 — modules/lambda/main.tf 주석 참고).
+# open_alert_queue/mailer와 같은 범용 모듈(modules/sqs, modules/lambda)을 재사용 — 예전엔
+# 전용 모듈(modules/messaging)로 따로 있었으나 리소스는 여전히 분리 유지(큐/함수 각 2개).
+# timeout/batch_size/report_batch_item_failures를 명시하는 이유: modules/lambda 기본값(batch 10,
+# ReportBatchItemFailures on)은 open-alert-mailer 기준이고, 이 Lambda는 기존 동작(batch 1, 부분배치
+# 실패응답 미지원)을 그대로 유지해야 해서 다르게 지정함. runtime은 둘 다 기본값(nodejs22.x)을 그대로 씀.
+module "notification_queue" {
+  source = "../modules/sqs"
 
+  name         = "email-verification"
   project_name = var.project_name
   environment  = local.environment
-  aws_region   = var.aws_region
-  namespace    = "qket-${local.environment}"
 
-  from_email = "noreply@jun979.click"
-  ses_domain = "jun979.click"
+  # notification_mailer의 timeout(30s) 기준 6배 — 모듈 기본값(60s)은 open-alert-mailer(timeout 10s)
+  # 기준이라 이 Lambda엔 배수가 부족함(modules/sqs/variables.tf 주석 참고)
+  visibility_timeout_seconds = 180
 }
 
-# 백엔드가 알림 큐에 메시지를 넣을 권한(sqs:SendMessage) — Lambda 쪽 IAM(모듈 안, 큐 읽기+SES 발송)만
+module "notification_mailer" {
+  source = "../modules/lambda"
+
+  name         = "email-verification"
+  project_name = var.project_name
+  environment  = local.environment
+  source_dir   = "${path.module}/../lambda/notification-mailer"
+
+  timeout                    = 30
+  batch_size                 = 1
+  report_batch_item_failures = false
+
+  queue_arn  = module.notification_queue.queue_arn
+  ses_domain = "jun979.click"
+  from_email = "noreply@jun979.click"
+}
+
+# 백엔드가 알림 큐들에 메시지를 넣을 권한(sqs:SendMessage) — Lambda 쪽 IAM(모듈 안, 큐 읽기+SES 발송)만
 # 만들어두고 이걸 빠뜨리면, 로컬에선 가짜 URL이라 InvalidAddressException으로 먼저 막혀서 못 잡아내지만
 # 실제 AWS에서는 백엔드가 SendMessage 호출 시 AccessDenied(403)로 조용히 실패함(코드가 예외를 삼키므로
 # 사용자는 "발송 실패"만 보고 원인은 CloudTrail/로그 봐야 알 수 있음) — 그래서 여기서 명시적으로 부여.
-# modules/storage에서 만든 백엔드 IRSA 역할(aws_iam_role.backend)에 정책만 추가로 붙이는 구조.
+# modules/storage에서 만든 백엔드 IRSA 역할(backend_role_name 출력값)에 정책만 추가로 붙이는 구조 —
+# 역할을 만드는 storage 모듈이 큐가 몇 개인지 알 필요 없게, 큐를 정의하는 이 root에서 큐마다 각각 attach.
+# (예전엔 오픈알림 큐 권한만 modules/storage 안에 따로 있었으나 두 큐 방식을 통일하며 이쪽으로 옮김)
+data "aws_iam_policy_document" "backend_sqs_open_alert" {
+  statement {
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = [module.open_alert_queue.queue_arn]
+  }
+}
+
+# name에 "open-alert"를 붙인 이유: 바로 아래 backend_sqs(개인 알림 큐용)와 같은 백엔드 역할에
+# 붙는 인라인 정책이라, 이름이 같으면 (역할, 이름)이 곧 식별자인 인라인 정책 특성상 나중에 apply한
+# 쪽이 먼저 것을 덮어써버림 — 실제로 겹쳤던 적이 있어서 접미사로 구분함.
+resource "aws_iam_role_policy" "backend_sqs_open_alert" {
+  name   = "${var.project_name}-backend-sqs-open-alert-${local.environment}"
+  role   = module.storage.backend_role_name
+  policy = data.aws_iam_policy_document.backend_sqs_open_alert.json
+}
+
 data "aws_iam_policy_document" "backend_sqs" {
   statement {
     effect = "Allow"
@@ -239,13 +281,13 @@ data "aws_iam_policy_document" "backend_sqs" {
       "sqs:SendMessage",
     ]
     resources = [
-      module.messaging.queue_arn,
+      module.notification_queue.queue_arn,
     ]
   }
 }
 
 resource "aws_iam_role_policy" "backend_sqs" {
-  name   = "${var.project_name}-backend-sqs-${local.environment}"
+  name   = "${var.project_name}-backend-sqs-messaging-${local.environment}"
   role   = module.storage.backend_role_name
   policy = data.aws_iam_policy_document.backend_sqs.json
 }

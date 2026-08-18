@@ -1,9 +1,9 @@
-# SES 도메인 인증 — 이메일 인증번호 발송(modules/messaging, 04_data에서 release/prod 두 번 호출)용.
-# 여기(03_registry, 공유·환경 구분 없음·절대 안 지움)에 두는 이유: 도메인 하나에 대한 SES 인증은
-# 계정당 한 번만 해야 하는데, 04_data는 release/prod 두 워크스페이스로 두 번 apply되므로 거기 두면
-# 같은 도메인을 두 번 인증하려다 충돌함. modules/messaging의 IAM 정책은 이 도메인 identity의
-# ARN을 계정/리전/도메인명으로 직접 계산해서 참조함(랜덤 접미사 없는 결정적 ARN이라 remote_state
-# 없이도 가능 — modules/messaging/iam.tf 참고).
+# SES 도메인 인증 — 이메일 인증번호/예매확정·취소/예매오픈 알림 발송(modules/lambda, 04_data에서
+# release/prod 두 번 호출)용. 여기(03_registry, 공유·환경 구분 없음·절대 안 지움)에 두는 이유:
+# 도메인 하나에 대한 SES 인증은 계정당 한 번만 해야 하는데, 04_data는 release/prod 두 워크스페이스로
+# 두 번 apply되므로 거기 두면 같은 도메인을 두 번 인증하려다 충돌함. modules/lambda의 IAM 정책은 이
+# 도메인 identity의 ARN을 계정/리전/도메인명으로 직접 계산해서 참조함(랜덤 접미사 없는 결정적 ARN이라
+# remote_state 없이도 가능 — modules/lambda/main.tf 참고).
 resource "aws_ses_domain_identity" "this" {
   domain = "jun979.click"
 }
