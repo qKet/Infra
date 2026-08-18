@@ -68,6 +68,17 @@ resource "helm_release" "monitoring" {
   # — Grafana의 범용 SigV4 서명 미들웨어가 AMP(aps) 서비스명을 못 알아봄. 대신 AWS가 공식으로
   # 만든 AMP 전용 플러그인(grafana-amazonprometheus-datasource)으로 교체 — 이건 서비스명을
   # 하드코딩해서 알고 있어서 이 문제 자체가 없음.
+  #
+  # 그런데 교체 후에도 queryData 호출이 "Missing Authentication Token"으로 계속 실패하던 버그가
+  # 있었음(위키 troubleshooting/grafana-amp-datasource-missing-auth-token 참고) — 서버 레벨
+  # sigv4_auth_enabled만 켜고 데이터소스 jsonData에 sigV4Auth를 명시적으로 안 켜서 실제 서명이
+  # 안 붙었던 게 원인으로 추정됨. GitHub grafana-amazonprometheus-datasource#640 코멘트에서
+  # 같은 증상을 겪은 사람이 이 조합(서버 설정 + jsonData.sigV4Auth)으로 해결했다고 확인해줌.
+  set {
+    name  = "grafana.grafana\\.ini.auth.sigv4_auth_enabled"
+    value = "true"
+  }
+
   set {
     name  = "grafana.plugins[0]"
     value = "grafana-amazonprometheus-datasource"
@@ -100,6 +111,17 @@ resource "helm_release" "monitoring" {
 
   set {
     name  = "grafana.additionalDataSources[0].jsonData.defaultRegion"
+    value = var.aws_region
+  }
+
+  # GitHub #640 워크어라운드의 핵심 필드 — 이게 빠져있어서 지금까지 서명이 안 붙었던 것으로 추정.
+  set {
+    name  = "grafana.additionalDataSources[0].jsonData.sigV4Auth"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].jsonData.sigV4Region"
     value = var.aws_region
   }
 
