@@ -37,11 +37,11 @@ data "aws_iam_policy_document" "eso_secrets_read" {
       "secretsmanager:GetSecretValue",
       "secretsmanager:DescribeSecret",
     ]
-    resources = [
+    resources = concat([
       var.rds_master_user_secret_arn,
       aws_secretsmanager_secret.connection.arn,
       aws_secretsmanager_secret.external_api.arn,
-    ]
+    ], var.extra_secret_arns)
   }
 }
 

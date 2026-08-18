@@ -18,9 +18,9 @@ resource "kubectl_manifest" "qket_cd_app" {
           # ArgoCD Notifications 구독 — 02_k8s-addon(helm_release.argocd)에 정의된 트리거/이메일
           # 서비스를 이 Application에 연결. 여러 명 추가할 땐 콤마로 구분: "a@x.com,b@x.com"
           annotations = {
-            "notifications.argoproj.io/subscribe.on-out-of-sync.email"     = "zubene1013@gmail.com"
-            "notifications.argoproj.io/subscribe.on-sync-failed.email"     = "zubene1013@gmail.com"
-            "notifications.argoproj.io/subscribe.on-health-degraded.email" = "zubene1013@gmail.com"
+            "notifications.argoproj.io/subscribe.on-out-of-sync.email"     = "zubene1013@gmail.com,chae_young813@naver.com,nyj16907@gmail.com,ojoj4055@gmail.com,pdu0415976@gmail.com"
+            "notifications.argoproj.io/subscribe.on-sync-failed.email"     = "zubene1013@gmail.com,chae_young813@naver.com,nyj16907@gmail.com,ojoj4055@gmail.com,pdu0415976@gmail.com"
+            "notifications.argoproj.io/subscribe.on-health-degraded.email" = "zubene1013@gmail.com,chae_young813@naver.com,nyj16907@gmail.com,ojoj4055@gmail.com,pdu0415976@gmail.com"
           }
       }
     spec = {

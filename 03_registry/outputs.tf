@@ -22,3 +22,8 @@ output "ses_identity_arn" {
   description = "예매 오픈 알림 발신 도메인 identity ARN — 04_data가 remote_state로 읽어서 Lambda 발송 권한에 씀"
   value       = module.ses.identity_arn
 }
+
+output "argocd_notifications_secret_arn" {
+  description = "ArgoCD 알림 Gmail 자격증명 Secrets Manager ARN — 02_k8s-addon이 remote_state로 읽어서 ESO(ExternalSecret)에 씀"
+  value       = aws_secretsmanager_secret.argocd_notifications.arn
+}

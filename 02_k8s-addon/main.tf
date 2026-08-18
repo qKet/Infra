@@ -63,6 +63,8 @@ resource "helm_release" "argocd" {
       enabled: true
       secret:
         create: false
+      context:
+        argocdUrl: https://cd.jun979.click
       notifiers:
         # 커스텀 이름(.gmail 등) 없이 기본 타입명(service.email)만 씀 — 계정 하나만 쓸 거라
         # subscribe 어노테이션도 "on-xxx.email"로 단순하게 걸 수 있음
@@ -73,13 +75,12 @@ resource "helm_release" "argocd" {
           port: 587
           from: $email-username
       templates:
-        # 기본 카탈로그(on-sync-failed, on-health-degraded)에는 없는 "Out-of-Sync 감지" 전용 템플릿
-        template.app-out-of-sync: |
-          email:
-            subject: "[ArgoCD] {{`{{.app.metadata.name}}`}} OutOfSync 감지됨"
-          message: |
-            {{`{{.app.metadata.name}}`}} 가 OutOfSync 상태입니다 — Git과 클러스터 상태가 다릅니다.
-            확인 후 수동으로 sync 해주세요: {{`{{.context.argocdUrl}}`}}/applications/{{`{{.app.metadata.name}}`}}
+                  template.app-out-of-sync: |
+                    email:
+                      subject: "[ArgoCD] {{.app.metadata.name}} OutOfSync 감지됨"
+                    message: |
+                      {{.app.metadata.name}} 가 OutOfSync 상태입니다 — Git과 클러스터 상태가 다릅니다.
+                      확인 후 수동으로 sync 해주세요: {{.context.argocdUrl}}/applications/{{.app.metadata.name}}
       triggers:
         # 기본 카탈로그엔 "Out-of-Sync 감지" 트리거가 없어서 직접 정의 (on-sync-status-unknown은
         # sync 상태를 "모르는" 경우고 OutOfSync랑 다른 상태라 대신 못 씀)
@@ -92,25 +93,7 @@ resource "helm_release" "argocd" {
   depends_on = [module.alb_controller]
 }
 
-# ArgoCD Notifications가 쓰는 Secret — helm_release.argocd가 만드는 "argocd" 네임스페이스가
-# 먼저 있어야 하므로 depends_on으로 순서 강제. 실제 값(gmail 계정/앱 비밀번호)은 변수로만 받고
-# 이 파일엔 절대 하드코딩하지 않음 — terraform apply 시 TF_VAR_notification_gmail_username /
-# TF_VAR_notification_gmail_app_password 환경변수로 주입.
-resource "kubernetes_secret" "argocd_notifications_secret" {
-  metadata {
-    name      = "argocd-notifications-secret"
-    namespace = "argocd"
-  }
 
-  data = {
-    email-username = var.notification_gmail_username
-    email-password = var.notification_gmail_app_password
-  }
-
-  type = "Opaque"
-
-  depends_on = [helm_release.argocd]
-}
 
 # AWS Load Balancer Controller — Ingress 오브젝트를 보고 실제 ALB를 만들어주는 컨트롤러.
 # 이게 없으면 Ingress를 아무리 apply해도 AWS에 ALB 자체가 안 생김(K8s 오브젝트만 있고 실체가 없음).
