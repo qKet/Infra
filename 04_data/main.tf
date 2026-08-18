@@ -215,6 +215,8 @@ module "eso" {
 
   secret_recovery_window_days = local.env_config.secret_recovery_window_days
   external_api_keys           = var.external_api_keys
+
+    extra_secret_arns = [data.terraform_remote_state.registry.outputs.argocd_notifications_secret_arn]
 }
 
 # 알림 발송 파이프라인 — 회원가입 이메일 인증 + 예매확정/취소 알림을 모두 여기 큐 하나로 처리.

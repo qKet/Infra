@@ -9,6 +9,8 @@ data "terraform_remote_state" "infrastructure" {
   }
 }
 
+
+# 03_registry가 만든 ArgoCD 알림용 Gmail 시크릿 ARN을 읽어오기 위함
 # AMP(Amazon Managed Prometheus) 워크스페이스 정보 — 03_registry에 있음(2026-08-13, 01_infrastructure에서
 # 이전됨. 이유: registry는 완전히 불변·수동 apply되는 싱글턴이라 AMP처럼 절대 안 지워져야 하는 리소스에 안전함).
 data "terraform_remote_state" "registry" {

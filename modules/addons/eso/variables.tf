@@ -49,6 +49,12 @@ variable "secret_recovery_window_days" {
   default     = 0
 }
 
+variable "extra_secret_arns" {
+  description = "db/redis/external_api 외에 이 ESO Role이 추가로 읽어야 하는 Secrets Manager ARN 목록 (예: 다른 root에서 만든 시크릿을 재사용할 때)"
+  type        = list(string)
+  default     = []
+}
+
 # 토스/OAuth 등 외부 API 키 — RDS/Redis 엔드포인트처럼 Terraform이 자동 계산하는 값이 아니라
 # 사람이 외부 서비스(토스 대시보드, 각 provider 개발자 콘솔)에서 직접 발급받은 값이라 변수로 받음.
 # TF_VAR_external_api_keys='{"toss_secret_key":"...",...}' 형태로 넘기거나, 각 필드를

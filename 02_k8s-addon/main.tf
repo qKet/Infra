@@ -48,8 +48,52 @@ resource "helm_release" "argocd" {
     value = "true"
   }
 
+  # ArgoCD Notifications — Out-of-Sync 감지/Sync 실패/Degraded 시 이메일(Gmail SMTP)로 알림.
+  # 실제 로그인 계정/비밀번호는 여기 안 넣고 kubernetes_secret.argocd_notifications_secret이
+  # 따로 만드는 Secret(argocd-notifications-secret)을 "$키이름" 문법으로 참조하게 함 — 이 파일이
+  # git에 커밋돼도 자격증명이 노출되지 않게 하기 위함. secret.create=false로 둬서 차트가 자체
+  # Secret을 만들지 않고, 우리가 별도로 만든 Secret을 그대로 쓰게 함.
+  #
+  # ⚠️ 적용 전 확인할 것: `helm show values argo/argo-cd | grep -A5 notifications`로 이 버전 차트가
+  # notifications.notifiers/templates/triggers/secret.create 키를 그대로 쓰는지 확인 — 차트 버전에
+  # 따라 값 경로가 다를 수 있음.
+  values = [
+    <<-YAML
+    notifications:
+      enabled: true
+      secret:
+        create: false
+      context:
+        argocdUrl: https://cd.jun979.click
+      notifiers:
+        # 커스텀 이름(.gmail 등) 없이 기본 타입명(service.email)만 씀 — 계정 하나만 쓸 거라
+        # subscribe 어노테이션도 "on-xxx.email"로 단순하게 걸 수 있음
+        service.email: |
+          username: $email-username
+          password: $email-password
+          host: smtp.gmail.com
+          port: 587
+          from: $email-username
+      templates:
+                  template.app-out-of-sync: |
+                    email:
+                      subject: "[ArgoCD] {{.app.metadata.name}} OutOfSync 감지됨"
+                    message: |
+                      {{.app.metadata.name}} 가 OutOfSync 상태입니다 — Git과 클러스터 상태가 다릅니다.
+                      확인 후 수동으로 sync 해주세요: {{.context.argocdUrl}}/applications/{{.app.metadata.name}}
+      triggers:
+        # 기본 카탈로그엔 "Out-of-Sync 감지" 트리거가 없어서 직접 정의 (on-sync-status-unknown은
+        # sync 상태를 "모르는" 경우고 OutOfSync랑 다른 상태라 대신 못 씀)
+        trigger.on-out-of-sync: |
+          - when: app.status.sync.status == 'OutOfSync'
+            send: [app-out-of-sync]
+    YAML
+  ]
+
   depends_on = [module.alb_controller]
 }
+
+
 
 # AWS Load Balancer Controller — Ingress 오브젝트를 보고 실제 ALB를 만들어주는 컨트롤러.
 # 이게 없으면 Ingress를 아무리 apply해도 AWS에 ALB 자체가 안 생김(K8s 오브젝트만 있고 실체가 없음).
