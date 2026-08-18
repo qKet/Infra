@@ -53,6 +53,6 @@ variable "ses_domain" {
 }
 
 variable "from_email" {
-  description = "발신자 이메일 주소 (SES identity 도메인 소속이어야 함, 예: noreply@jun979.click)"
+  description = "발신자 이메일 주소 — 03_registry/ses.tf가 인증해둔 도메인 소속이어야 함(예: noreply@jun979.click). SES SendEmail 권한을 도메인 ARN·발신주소 ARN 둘 다 기준으로 부여함(모듈 main.tf 주석 참고)"
   type        = string
 }
