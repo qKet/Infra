@@ -7,6 +7,19 @@ module "ecr" {
   repository_name = var.ecr_repository_name
 }
 
+# Amazon Managed Prometheus(AMP) — 02_k8s-addon의 Prometheus가 수집한 지표를 EKS 클러스터
+# 수명과 무관하게 영구 저장하는 곳. 원래 01_infrastructure에 뒀었는데(2026-08-12), 그 root도
+# 매일 브랜치가 안 맞으면 orphan 리소스로 오인돼 지워질 수 있다는 걸 실제로 겪음(2026-08-13,
+# 팀원이 이 코드 없는 main으로 apply해서 AMP 워크스페이스가 통째로 삭제됨). registry는 ECR처럼
+# 완전히 독립적이고 수동으로만 apply하는 불변 싱글턴이라 이게 진짜 안전한 자리 — IRSA(쓰기 권한)는
+# 02_k8s-addon의 Prometheus ServiceAccount 생명주기를 따라가야 해서 여기 안 두고 modules/addons/monitoring에 둠.
+#
+# 일반 EBS(PVC) 방식도 검토했으나 기각 — EKS를 destroy하면 PVC도 같이 삭제되고 StorageClass의
+# ReclaimPolicy가 Delete라 EBS 볼륨도 함께 지워짐(Pod 재시작엔 강하지만 클러스터 재생성엔 무력).
+resource "aws_prometheus_workspace" "this" {
+  alias = "${var.project_name}-amp"
+}
+
 # GitHub Actions가 고정 키 없이 OIDC로 AWS(ECR push)에 접근하기 위한 IAM.
 # backend/frontend 레포 각각 별도 role — 서로 다른 레포의 워크플로우가 남의 role을 못 씀.
 module "github_actions_oidc" {
@@ -32,10 +45,7 @@ module "github_actions_oidc" {
   }
 }
 
-# 예매 오픈 알림 발신 도메인. release/prod 구분 없는 도메인 단위 리소스라 ECR/OIDC와
-# 같은 이유로 여기 둠(04_data는 workspace별로 두 번 생기는 구조라 안 맞음). 반드시 import 먼저 — modules/ses/main.tf 상단 주석 참고.
-module "ses" {
-  source = "../modules/ses"
-
-  domain = var.ses_domain
-}
+# SES 도메인 인증(jun979.click)은 ses.tf(이메일인증/예매확정·취소 알림용으로 먼저 만들어짐)가 관리 —
+# 예매 오픈 알림도 같은 도메인을 쓰지만, SES 도메인 인증은 계정당 하나뿐이라 별도 모듈로 안 두고
+# modules/lambda가 ses.tf 결과를 계정/리전/도메인명으로 직접 계산해서 참조함(중복 관리 방지).
+# 자세한 이유는 modules/lambda/main.tf의 동일 패턴 주석 참고.

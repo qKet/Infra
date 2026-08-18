@@ -51,6 +51,8 @@ async function sendOpenAlertEmail(record) {
       },
     })
   );
+
+  console.log("예매 오픈 알림 SES 발송 성공", { messageId: record.messageId, toEmail });
 }
 
 // 백엔드가 LocalDateTime을 그대로 Jackson 직렬화해서 보내므로 "2026-08-15T19:00:00" 형태로 옴

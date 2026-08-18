@@ -25,6 +25,7 @@ variable "ecr_repository_name" {
   default     = "team5/ecr/qket"
 }
 
+
 /*******************
 *     SES (예매 오픈 알림)
 *******************/
@@ -50,3 +51,5 @@ variable "notification_gmail_app_password" {
   sensitive   = true
   default     = ""
 }
+
+
