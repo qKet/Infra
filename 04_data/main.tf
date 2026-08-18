@@ -19,7 +19,7 @@ locals {
 
   env_config_map = {
     release = {
-      db_instance_class           = "db.t3.micro"
+      db_instance_class           = "db.t3.medium" # 팀 결정으로 medium 고정 (2026-08-18, 라이브와 코드 drift 정리)
       db_allocated_storage        = 20
       db_max_allocated_storage    = 100
       multi_az                    = false
