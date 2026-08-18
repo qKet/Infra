@@ -72,7 +72,7 @@ resource "aws_acm_certificate_validation" "argocd" {
 # Grafana/ArgoCD 둘 다 이 목록 하나를 공유함(위 주석 참고).
 locals {
   admin_allowed_cidrs = [
-    "222.111.118.165/32", # 팀원 IP
+    "222.111.119.115/32", # 팀원 IP
     "121.138.193.90/32",  # 사용자 본인 IP
     "162.120.184.59/32"
   ]
