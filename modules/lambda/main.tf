@@ -33,11 +33,12 @@ resource "aws_iam_role_policy_attachment" "logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# SES 도메인 identity ARN — 계정ID+리전+도메인명으로 완전히 결정되는 값(랜덤 접미사 없음)이라
-# 데이터소스로 직접 계산 가능. 도메인 자체의 인증(aws_ses_domain_identity)은 03_registry/ses.tf가
-# 관리(계정당 도메인 인증은 한 번만 해야 해서 여기 모듈에 따로 안 둠). 이 모듈이 open-alert-mailer,
-# notification-mailer 양쪽 다에서 재사용되므로 이 패턴도 자동으로 공유됨. 03_registry가 이 도메인을
-# 실제로 인증해뒀다는 전제이고, 순서가 어긋나면 apply 시점에 "그런 identity 없음" 에러로 바로 드러남.
+# SES identity ARN — 계정ID+리전+주소로 완전히 결정되는 값(랜덤 접미사 없음)이라 데이터소스로 직접
+# 계산 가능. 도메인 자체의 인증(aws_ses_domain_identity)은 03_registry/ses.tf가 관리(계정당 도메인
+# 인증은 한 번만 해야 해서 여기 모듈에 따로 안 둠) — 이 identity ARN은 인증 여부와 무관하게 IAM
+# authorization에서 실제로 검사하는 리소스일 뿐. 이 모듈이 open-alert-mailer, notification-mailer
+# 양쪽 다에서 재사용되므로 이 패턴도 자동으로 공유됨. 03_registry가 이 도메인을 실제로 인증해뒀다는
+# 전제이고, 순서가 어긋나면 Lambda 실행 시점에 SES가 "그런 identity 없음"으로 거부한다.
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
@@ -52,8 +53,12 @@ data "aws_iam_policy_document" "permissions" {
   statement {
     effect  = "Allow"
     actions = ["ses:SendEmail"]
+    # SES 발송 자체는 도메인 인증만으로 되지만(jun979.click 검증 = 그 밑 어떤 주소든 발송 가능),
+    # IAM 정책의 Resource 매칭은 요청이 실제로 쓰는 identity ARN을 그대로 봐서 도메인 ARN(identity/jun979.click)이
+    # 아니라 발신주소 ARN(identity/noreply@jun979.click)을 검사함 — 실제로 도메인 ARN만 허용해뒀다가
+    # AccessDeniedException을 겪은 적이 있어서, 코드가 실제로 쓰는 from_email 기준으로만 허용.
     resources = [
-      "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:identity/${var.ses_domain}",
+      "arn:aws:ses:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:identity/${var.from_email}",
     ]
   }
 }
