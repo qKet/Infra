@@ -25,4 +25,103 @@ resource "helm_release" "monitoring" {
     name  = "grafana.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
     value = aws_iam_role.grafana.arn
   }
+
+  # 대시보드를 git(ConfigMap)에서 자동으로 읽어오게 함 — sidecar 컨테이너가
+  # grafana_dashboard=1 라벨 붙은 ConfigMap을 감지해서 자동 로드. EKS를 destroy/재생성해도
+  # 이 helm_release만 다시 apply하면 대시보드가 그대로 돌아옴(02_k8s-addon/main.tf의
+  # kubernetes_config_map.grafana_dashboards가 실제 ConfigMap을 공급).
+  set {
+    name  = "grafana.sidecar.dashboards.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.sidecar.dashboards.label"
+    value = "grafana_dashboard"
+  }
+
+  # Prometheus가 수집한 지표를 AMP(Amazon Managed Prometheus)로 원격 저장 — EKS를
+  # destroy/재생성해도 지표 히스토리가 안 없어지게 함(일반 EBS는 PVC가 클러스터랑 같이
+  # 삭제되면서 볼륨도 같이 지워져서 이 문제를 못 풂 — AMP 저장소는 03_registry/main.tf 참고,
+  # 이 IRSA Role은 바로 위 iam.tf의 aws_iam_role.prometheus 참고).
+  set {
+    name  = "prometheus.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = aws_iam_role.prometheus.arn
+  }
+
+  set {
+    name  = "prometheus.prometheusSpec.remoteWrite[0].url"
+    value = var.amp_remote_write_endpoint
+  }
+
+  set {
+    name  = "prometheus.prometheusSpec.remoteWrite[0].sigv4.region"
+    value = var.aws_region
+  }
+
+  # Grafana가 AMP를 직접 조회하게 함 — 위 remoteWrite는 "보내는" 설정일 뿐이고, 이게 없으면
+  # Grafana는 여전히 로컬(클러스터 안) Prometheus만 봐서 EKS 재생성 시 과거 그래프가 끊겨 보임
+  # (iam.tf의 grafana_amp_query 정책이 필요 권한 부여).
+  #
+  # 범용 "prometheus" 타입 + sigV4Auth 조합으로 처음 시도했다가 AWS가
+  # "Credential should be scoped to correct service: 'aps'"로 거부하는 문제를 겪음(2026-08-12)
+  # — Grafana의 범용 SigV4 서명 미들웨어가 AMP(aps) 서비스명을 못 알아봄. 대신 AWS가 공식으로
+  # 만든 AMP 전용 플러그인(grafana-amazonprometheus-datasource)으로 교체 — 이건 서비스명을
+  # 하드코딩해서 알고 있어서 이 문제 자체가 없음.
+  set {
+    name  = "grafana.plugins[0]"
+    value = "grafana-amazonprometheus-datasource"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].name"
+    value = "AMP"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].type"
+    value = "grafana-amazonprometheus-datasource"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].url"
+    value = var.amp_query_endpoint
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].access"
+    value = "proxy"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].jsonData.authType"
+    value = "default"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].jsonData.defaultRegion"
+    value = var.aws_region
+  }
+
+  # RDS/Redis 지표는 백엔드가 직접 노출 안 해서(HikariCP는 예외) CloudWatch 데이터소스로 봄.
+  # IAM은 iam.tf의 grafana_cloudwatch_read 정책으로 이미 준비돼있음(IRSA, 이 Grafana ServiceAccount 전용).
+  set {
+    name  = "grafana.additionalDataSources[1].name"
+    value = "CloudWatch"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].type"
+    value = "cloudwatch"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].jsonData.authType"
+    value = "default"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[1].jsonData.defaultRegion"
+    value = var.aws_region
+  }
 }
