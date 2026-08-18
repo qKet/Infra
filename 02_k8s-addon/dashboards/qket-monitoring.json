@@ -114,7 +114,7 @@
             "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"qket-release\", container=\"qket-backend\"}[5m])) * 100\r\n",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"qket-release\", container=\"qket-backend\"}[$__rate_interval])) * 100\r\n",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -216,7 +216,7 @@
             "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"qket-release\", container=\"qket-frontend\"}[5m])) * 100\r\n",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"qket-release\", container=\"qket-frontend\"}[$__rate_interval])) * 100\r\n",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -282,7 +282,7 @@
             "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
-          "expr": "sum by (uri) (rate(http_server_requests_seconds_sum{namespace=\"qket-release\"}[5m])) / sum by (uri) (rate(http_server_requests_seconds_count{namespace=\"qket-release\"}[5m])) * 1000\r\n",
+          "expr": "sum by (uri) (rate(http_server_requests_seconds_sum{namespace=\"qket-release\"}[$__rate_interval])) / sum by (uri) (rate(http_server_requests_seconds_count{namespace=\"qket-release\"}[$__rate_interval])) * 1000\r\n",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -348,7 +348,7 @@
             "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
-          "expr": "sum by (uri) (rate(http_server_requests_seconds_count{namespace=\"qket-release\"}[5m]))\r\n",
+          "expr": "sum by (uri) (rate(http_server_requests_seconds_count{namespace=\"qket-release\"}[$__rate_interval]))\r\n",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -455,7 +455,7 @@
             "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"qket-release\", outcome=\"SERVER_ERROR\"}[5m])) / sum(rate(http_server_requests_seconds_count{namespace=\"qket-release\"}[5m])) * 100",
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"qket-release\", outcome=\"SERVER_ERROR\"}[$__rate_interval])) / sum(rate(http_server_requests_seconds_count{namespace=\"qket-release\"}[$__rate_interval])) * 100",
           "legendFormat": "5xx 에러율",
           "range": true,
           "refId": "A"
@@ -1329,7 +1329,7 @@
             "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
-          "expr": "sum(increase(container_cpu_cfs_throttled_periods_total{namespace=\"qket-release\", container=~\"qket-backend|qket-frontend\"}[5m])) by (pod)",
+          "expr": "sum(increase(container_cpu_cfs_throttled_periods_total{namespace=\"qket-release\", container=~\"qket-backend|qket-frontend\"}[$__rate_interval])) by (pod)",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1437,7 +1437,7 @@
             "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[$__rate_interval])) * 100)",
           "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
@@ -1470,5 +1470,5 @@
   },
   "timezone": "browser",
   "title": "qket",
-  "version": 14
+  "version": 15
 }
