@@ -114,6 +114,25 @@ module "alb_controller" {
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
 }
 
+# Cluster Autoscaler — EKS 노드그룹(modules/eks)의 desired_size를 min~max(01_infrastructure/
+# variables.tf, 지금 1~3) 사이에서 자동 조절. KEDA(파드 오토스케일링)가 replica를 늘려도 이게
+# 없으면 그 파드들이 노드 부족으로 Pending에 멈춤 — 2026-08-18 대용량 트래픽 용량 분석에서 발견
+# (CLAUDE_LLM_WIKI decisions/2026-08-18-capacity-planning-large-traffic-readiness 참고).
+# Karpenter 대신 이걸 고른 이유는 modules/addons/cluster-autoscaler/main.tf 주석 참고.
+module "cluster_autoscaler" {
+  source = "../modules/addons/cluster-autoscaler"
+
+  project_name = var.project_name
+  aws_region   = var.aws_region
+  cluster_name = data.terraform_remote_state.infrastructure.outputs.eks_cluster_name
+  eks_version  = data.terraform_remote_state.infrastructure.outputs.eks_version
+
+  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
+  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  depends_on = [module.alb_controller]
+}
+
 # ExternalDNS — ALB Controller가 만든 ALB의 주소를 Route53에 자동으로 연결
 #
 # depends_on = [module.alb_controller] — helm_release.argocd와 같은 이유(위 주석 참고): 이 차트도
@@ -154,6 +173,7 @@ module "monitoring" {
   depends_on = [module.alb_controller]
 }
 
+
 # Grafana 대시보드 정의를 git에 저장 — EKS를 destroy/재생성해도 module.monitoring만 다시
 # apply하면 대시보드가 자동으로 돌아옴(module.monitoring의 sidecar.dashboards 설정이 이
 # ConfigMap을 grafana_dashboard=1 라벨로 찾아서 자동 로드). JSON은 Grafana UI의 dashboard
@@ -190,7 +210,7 @@ resource "kubernetes_manifest" "backend_service_monitor" {
     }
     spec = {
       namespaceSelector = { matchNames = ["qket-release"] }
-      selector           = { matchLabels = { app = "qket-backend" } }
+      selector          = { matchLabels = { app = "qket-backend" } }
       endpoints = [
         { targetPort = 8080, path = "/api/actuator/prometheus", interval = "15s" }
       ]
@@ -198,6 +218,23 @@ resource "kubernetes_manifest" "backend_service_monitor" {
   }
 
   depends_on = [module.monitoring]
+}
+
+# KEDA — backend 오토스케일링용. 실제 스케일 규칙(ScaledObject)은 CD 레포(Helm)에 있고,
+# 여기는 그 규칙을 처리할 컨트롤러(엔진)만 설치. modules/addons/keda/main.tf 주석 참고.
+module "keda" {
+  source = "../modules/addons/keda"
+
+  depends_on = [module.alb_controller]
+}
+
+# metrics-server — KEDA(cpu trigger)가 만드는 HPA가 CPU 사용률을 읽으려면 이게 반드시 있어야 함.
+# 이게 없으면 HPA가 "unknown"으로 멈춰서 ScaledObject를 아무리 만들어도 절대 스케일 안 됨 —
+# 2026-08-13 부하테스트에서 4개 replica가 끝까지 안 늘어난 원인이 이거였음(modules/addons/metrics-server 참고).
+module "metrics_server" {
+  source = "../modules/addons/metrics-server"
+
+  depends_on = [module.alb_controller]
 }
 
 # 환경별 Ingress 설정 — 원래 CD/helm/templates/ingress.yaml(ArgoCD가 배포)이 갖고 있었는데,

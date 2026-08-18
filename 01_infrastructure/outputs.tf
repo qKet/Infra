@@ -77,6 +77,11 @@ output "eks_cluster_name" {
   value       = module.eks.cluster_name
 }
 
+output "eks_version" {
+  description = "EKS 클러스터 쿠버네티스 버전 — module.cluster_autoscaler가 이미지 태그를 여기에 맞춤(02_k8s-addon)"
+  value       = var.eks_version
+}
+
 output "eks_cluster_endpoint" {
   description = "EKS 클러스터 API 엔드포인트"
   value       = module.eks.cluster_endpoint
