@@ -70,6 +70,25 @@ module "alb_controller" {
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
 }
 
+# Cluster Autoscaler — EKS 노드그룹(modules/eks)의 desired_size를 min~max(01_infrastructure/
+# variables.tf, 지금 1~3) 사이에서 자동 조절. KEDA(파드 오토스케일링)가 replica를 늘려도 이게
+# 없으면 그 파드들이 노드 부족으로 Pending에 멈춤 — 2026-08-18 대용량 트래픽 용량 분석에서 발견
+# (CLAUDE_LLM_WIKI decisions/2026-08-18-capacity-planning-large-traffic-readiness 참고).
+# Karpenter 대신 이걸 고른 이유는 modules/addons/cluster-autoscaler/main.tf 주석 참고.
+module "cluster_autoscaler" {
+  source = "../modules/addons/cluster-autoscaler"
+
+  project_name = var.project_name
+  aws_region   = var.aws_region
+  cluster_name = data.terraform_remote_state.infrastructure.outputs.eks_cluster_name
+  eks_version  = data.terraform_remote_state.infrastructure.outputs.eks_version
+
+  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
+  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  depends_on = [module.alb_controller]
+}
+
 # ExternalDNS — ALB Controller가 만든 ALB의 주소를 Route53에 자동으로 연결
 #
 # depends_on = [module.alb_controller] — helm_release.argocd와 같은 이유(위 주석 참고): 이 차트도
@@ -170,14 +189,6 @@ module "keda" {
 # 2026-08-13 부하테스트에서 4개 replica가 끝까지 안 늘어난 원인이 이거였음(modules/addons/metrics-server 참고).
 module "metrics_server" {
   source = "../modules/addons/metrics-server"
-
-  depends_on = [module.alb_controller]
-}
-
-# KEDA — backend 오토스케일링용. 실제 스케일 규칙(ScaledObject)은 CD 레포(Helm)에 있고,
-# 여기는 그 규칙을 처리할 컨트롤러(엔진)만 설치. modules/addons/keda/main.tf 주석 참고.
-module "keda" {
-  source = "../modules/addons/keda"
 
   depends_on = [module.alb_controller]
 }
