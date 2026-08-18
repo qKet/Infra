@@ -23,8 +23,8 @@
   "panels": [
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -110,8 +110,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"qket-release\", container=\"qket-backend\"}[5m])) * 100\r\n",
@@ -125,8 +125,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -212,8 +212,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"qket-release\", container=\"qket-frontend\"}[5m])) * 100\r\n",
@@ -227,8 +227,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -278,8 +278,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum by (uri) (rate(http_server_requests_seconds_sum{namespace=\"qket-release\"}[5m])) / sum by (uri) (rate(http_server_requests_seconds_count{namespace=\"qket-release\"}[5m])) * 1000\r\n",
@@ -293,8 +293,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -344,8 +344,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum by (uri) (rate(http_server_requests_seconds_count{namespace=\"qket-release\"}[5m]))\r\n",
@@ -359,8 +359,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -451,8 +451,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"qket-release\", outcome=\"SERVER_ERROR\"}[5m])) / sum(rate(http_server_requests_seconds_count{namespace=\"qket-release\"}[5m])) * 100",
@@ -466,8 +466,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -553,8 +553,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum(hikaricp_connections_active{namespace=\"qket-release\"})",
@@ -564,8 +564,8 @@
         },
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum(hikaricp_connections_pending{namespace=\"qket-release\"})",
@@ -575,8 +575,8 @@
         },
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum(hikaricp_connections_max{namespace=\"qket-release\"})",
@@ -590,8 +590,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -678,8 +678,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum(container_memory_working_set_bytes{namespace=\"qket-release\", container=\"qket-backend\"})",
@@ -689,8 +689,8 @@
         },
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum(container_memory_working_set_bytes{namespace=\"qket-release\", container=\"qket-frontend\"})",
@@ -704,8 +704,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -755,8 +755,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum by (pod) (kube_pod_container_status_restarts_total{namespace=\"qket-release\"})",
@@ -770,8 +770,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -858,8 +858,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "kube_deployment_status_replicas_available{namespace=\"qket-release\", deployment=\"qket-backend\"}",
@@ -869,8 +869,8 @@
         },
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "kube_deployment_status_replicas_available{namespace=\"qket-release\", deployment=\"qket-frontend\"}",
@@ -1238,8 +1238,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -1325,8 +1325,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "sum(increase(container_cpu_cfs_throttled_periods_total{namespace=\"qket-release\", container=~\"qket-backend|qket-frontend\"}[5m])) by (pod)",
@@ -1340,8 +1340,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "grafana-amazonprometheus-datasource",
+        "uid": "PD476F800710936AE"
       },
       "fieldConfig": {
         "defaults": {
@@ -1433,8 +1433,8 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "grafana-amazonprometheus-datasource",
+            "uid": "PD476F800710936AE"
           },
           "editorMode": "code",
           "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
@@ -1470,5 +1470,5 @@
   },
   "timezone": "browser",
   "title": "qket",
-  "version": 13
+  "version": 14
 }
