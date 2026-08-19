@@ -173,6 +173,34 @@ module "monitoring" {
   depends_on = [module.alb_controller]
 }
 
+# 로그 저장소(Loki) — 프론트(Next.js SSR/미들웨어)·백엔드(Spring Boot) 파드가 찍는 로그를
+# 모아서 위 Grafana에서 같이 볼 수 있게 함. monitoring 모듈과 같은 네임스페이스(monitoring)에 설치.
+module "loki" {
+  source = "../modules/addons/loki"
+
+  project_name = var.project_name
+  aws_region   = var.aws_region
+
+  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
+  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  depends_on = [module.alb_controller]
+}
+
+# 노드마다 떠서 파드 로그를 Loki로 전송 — module.loki가 먼저 만들어져 있어야 보낼 곳이 있음.
+module "promtail" {
+  source = "../modules/addons/promtail"
+
+  depends_on = [module.loki]
+}
+
+# 브라우저(프론트엔드 Faro SDK)가 보내는 클릭/에러 이벤트를 받아서 Loki로 전달.
+module "alloy_faro" {
+  source = "../modules/addons/alloy-faro"
+
+  depends_on = [module.loki]
+}
+
 
 # Grafana 대시보드 정의를 git에 저장 — EKS를 destroy/재생성해도 module.monitoring만 다시
 # apply하면 대시보드가 자동으로 돌아옴(module.monitoring의 sidecar.dashboards 설정이 이
@@ -358,4 +386,58 @@ resource "kubernetes_ingress_v1" "app_ingress_frontend" {
   wait_for_load_balancer = false
 
   depends_on = [module.alb_controller]
+}
+
+# 브라우저(Faro SDK)가 dev.jun979.click/faro-collector, app.jun979.click/faro-collector로
+# 이벤트를 보내면 monitoring 네임스페이스의 alloy-faro 서비스로 라우팅 — 같은 ALB group("qket")에
+# 묶어서 백엔드/프론트엔드랑 로드밸런서 하나를 같이 씀(비용 절감, alb_controller 모듈 주석 참고 패턴과 동일).
+resource "kubernetes_ingress_v1" "faro_ingress" {
+  for_each = local.ingress_config
+
+  metadata {
+    # release/prod 둘 다 같은 네임스페이스(monitoring, alloy-faro가 있는 곳)를 쓰기 때문에
+    # backend/frontend Ingress처럼 네임스페이스로 구분이 안 됨 — 이름 자체에 환경을 붙여서 구분.
+    name      = "app-alb-ingress-faro-${each.key}"
+    namespace = "monitoring"
+
+    annotations = {
+      "alb.ingress.kubernetes.io/group.name"         = "qket"
+      "alb.ingress.kubernetes.io/group.order"        = "5"
+      "alb.ingress.kubernetes.io/tags"               = "Team=team5,Project=qket"
+      "alb.ingress.kubernetes.io/load-balancer-name" = "team5-qket-alb"
+      "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"        = "ip"
+      "alb.ingress.kubernetes.io/certificate-arn"    = each.value.certificate_arn
+      "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
+      "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
+    }
+  }
+
+  spec {
+    ingress_class_name = "alb"
+
+    rule {
+      host = each.value.host
+
+      http {
+        path {
+          path      = "/faro-collector"
+          path_type = "Prefix"
+
+          backend {
+            service {
+              name = "alloy-faro"
+              port {
+                number = 12347
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  wait_for_load_balancer = false
+
+  depends_on = [module.alb_controller, module.alloy_faro]
 }
