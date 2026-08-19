@@ -1,7 +1,5 @@
 # backend/frontend 이미지를 담는 저장소. release/prod가 태그(예: backend-<sha>)로만 구분되고
 # 저장소 자체는 공유 — 03_registry(절대 안 지우는 싱글턴 root)에서 딱 한 번만 생성.
-# (2026-08-10 TODO였던 "infrastructure root에서 registry root로 이전"은 이미 완료됨 — 이 모듈은
-# 이제 03_registry/main.tf에서만 호출됨, 01_infrastructure는 더 이상 참조하지 않음.)
 resource "aws_ecr_repository" "this" {
   name                 = var.repository_name
   image_tag_mutability = var.image_tag_mutability
