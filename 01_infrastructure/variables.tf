@@ -61,7 +61,7 @@ variable "node_min_size" {
 variable "node_max_size" {
   description = "노드그룹 최대 노드 수"
   type        = number
-  default     = 3
+  default     = 4
 }
 
 /*******************
