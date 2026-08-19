@@ -232,6 +232,12 @@ resource "kubernetes_config_map" "grafana_dashboards" {
 # release 환경만 우선 커버. backend Service(qket-backend-service)에 포트 이름이 없어서
 # port(이름) 대신 targetPort(번호)로 참조함 — Service에 `name: http`를 붙이면 더 표준적인
 # port 참조로 바꿀 수 있음.
+#
+# targetPort=8081, path=/actuator/prometheus (앱 메인 포트 8080/context-path `/api`와 다름) —
+# actuator가 보안상 별도 관리 포트(8081)로 분리되어 있고, management 포트는 server.servlet.context-path를
+# 상속하지 않아 `/api` 접두어가 안 붙음. 예전엔 8080 + `/api/actuator/prometheus`로 잘못 설정돼 있었는데,
+# 그때는 우연히 앱과 actuator가 같은 포트를 썼어서 동작하다가 actuator가 8081로 분리되면서 조용히 깨짐
+# (Prometheus up=0, 404) — 부하테스트 도중 발견.
 resource "kubernetes_manifest" "backend_service_monitor" {
   manifest = {
     apiVersion = "monitoring.coreos.com/v1"
@@ -245,7 +251,7 @@ resource "kubernetes_manifest" "backend_service_monitor" {
       namespaceSelector = { matchNames = ["qket-release"] }
       selector          = { matchLabels = { app = "qket-backend" } }
       endpoints = [
-        { targetPort = 8080, path = "/api/actuator/prometheus", interval = "15s" }
+        { targetPort = 8081, path = "/actuator/prometheus", interval = "15s" }
       ]
     }
   }
