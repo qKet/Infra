@@ -25,9 +25,9 @@ export const options = {
   scenarios: {
     e2e_reservation: {
       executor: 'per-vu-iterations',
-      vus: 2000,
+      vus: 4000,
       iterations: 1,
-      maxDuration: '40m', // 대기열 MAX_ACTIVE_USERS=10 이라 2000명이 다 순서 오는데 오래 걸림 — 넉넉히 잡음
+      maxDuration: '40m', // 좌석(2000석)보다 인원(4000명)이 많은 오픈런 시나리오 — 절반은 매진으로 실패하는 게 정상
     },
   },
   thresholds: {
@@ -64,7 +64,11 @@ export default function () {
     reservationBug.add(1);
     return;
   }
-  const queueToken = JSON.parse(joinRes.body).queueToken;
+  // GlobalResponseAdvice: record/DTO/List를 리턴하는 컨트롤러(QueueJoinResponse 등)는
+  // { success, message, data, timestamp }로 감싸지고 실제 값은 data 밑에 있음 —
+  // Map을 직접 리턴하는 /reservations 계열과 다름(거긴 안 감싸짐). 이 구분을 안 하고
+  // 최상위에서 바로 필드를 읽어서 계속 undefined였던 게 지금까지 모든 실행의 진짜 원인이었음.
+  const queueToken = JSON.parse(joinRes.body).data.queueToken;
 
   // 4. 대기열 상태 폴링 — ENTERED(활성) 될 때까지 (MAX_ACTIVE_USERS=10이라 순서 기다림)
   const waitStart = Date.now();
@@ -79,7 +83,7 @@ export default function () {
       pollBroke = true;
       break;
     }
-    const status = JSON.parse(statusRes.body).status;
+    const status = JSON.parse(statusRes.body).data.status;
     if (status === 'ENTERED') {
       entered = true;
       break;
@@ -108,7 +112,7 @@ export default function () {
       transientFail.add(1);
       return; // give_up과 섞이지 않게 여기서 바로 종료
     }
-    const seats = JSON.parse(seatsRes.body);
+    const seats = JSON.parse(seatsRes.body).data;
     const available = seats.filter((s) => s.status === 'AVAILABLE');
 
     if (available.length === 0) {
@@ -121,7 +125,9 @@ export default function () {
       `${BASE}/reservations`,
       JSON.stringify({
         seatId: pick.seatId,
-        roundId: pick.roundId,
+        roundId: ROUND_ID, // 좌석 조회 응답의 roundId가 항상 null로 내려오는 백엔드 쿼리 이슈 발견 —
+        // 이 필드를 그대로 보내면 UPDATE ... WHERE round_id=? 가 NULL과 비교돼서 절대 매칭이 안 되고
+        // "이미 예매된 좌석"처럼 항상 실패함. 이미 알고 있는 상수를 대신 사용해서 우회.
         reservationId: pick.reservationId,
         queueToken,
       }),
