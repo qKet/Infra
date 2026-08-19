@@ -65,18 +65,16 @@ resource "helm_release" "loki" {
       singleBinary = {
         replicas = 1
         persistence = {
-          # 2026-08-19: 처음엔 EBS(PVC)로 시도했는데, 스케줄러와 EBS 프로비저너 사이에서
-          # "PVC가 동시에 수정됨" 경합이 계속 반복돼서 파드가 영원히 Pending에 머무름
-          # (재시도/재생성으로도 안 풀림 — 일회성 버그가 아니라 이 클러스터 환경에서 반복 재현됨).
-          # 여기 로컬 디스크는 어차피 WAL(임시 버퍼)일 뿐이고 실제 로그는 위 S3에 저장되니,
-          # EBS 없이 파드 안 임시 디스크(emptyDir)로 대체 — 파드가 재시작되면 최근 몇 분치
-          # WAL만 유실될 수 있지만, S3에 이미 쓰인 로그는 영향 없음.
+          # 2026-08-19: singleBinary 모드는 EBS(PVC) 아니면 볼륨 없음 둘 중 하나만 지원함
+          # (emptyDir 전용 모드는 write/backend 컴포넌트에만 있고 singleBinary엔 없음 —
+          # `helm show values grafana/loki`로 직접 확인함). 그래서 EBS로 감.
           #
-          # enabled=false만 주면 차트가 볼륨 자체를 안 만들어서(대신 컨테이너 루트 파일시스템에
-          # 직접 쓰려다 읽기전용/권한 문제로 계속 크래시함) — type="emptyDir"로 명시해야
-          # 차트가 올바른 권한(fsGroup 등)으로 emptyDir 볼륨을 제대로 붙여줌.
-          enabled = true
-          type    = "emptyDir"
+          # storageClass를 명시하는 이유: 클러스터에 "gp2" StorageClass는 있지만 기본(default)로
+          # 지정돼 있지 않아서(kubectl get storageclass에 (default) 표시 없음), 비워두면 PVC가
+          # 매칭될 클래스를 못 찾아 영원히 Pending으로 남음.
+          enabled      = true
+          size         = "10Gi"
+          storageClass = "gp2"
         }
       }
 
