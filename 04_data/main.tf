@@ -19,11 +19,6 @@ locals {
 
   env_config_map = {
     release = {
-      # 2026-08-18: db.t3.micro → db.t3.medium — 대용량 트래픽 용량 분석(CLAUDE_LLM_WIKI
-      # decisions/2026-08-18-capacity-planning-large-traffic-readiness) 후속 조치. 목적은
-      # 두 가지: (1) max_connections이 ~85→~340대로 늘어나 backend maxReplicas(8)×dbPoolSize(10)=80의
-      # 얇았던 여유(5)가 실질적으로 풀림, (2) 부하테스트로 실제 대용량 시나리오를 검증할 여유가 생김.
-      # prod(db.t3.small)는 아직 실트래픽 규모가 불확실해서 이번엔 안 올림 — release에서 재측정 후 결정.
       db_instance_class           = "db.t3.medium"
       db_allocated_storage        = 20
       db_max_allocated_storage    = 100
@@ -31,7 +26,7 @@ locals {
       skip_final_snapshot         = true
       deletion_protection         = false
       redis_node_type             = "cache.t3.micro"
-      force_destroy               = false # 2026-08-13: release도 실수로 destroy할 때 안에 파일 있으면 막히게 — true였을 땐 포스터 이미지가 통째로 날아갈 수 있었음
+      force_destroy               = false 
       secret_recovery_window_days = 0     # 바로 삭제 — 자주 재생성하는 샌드박스라 대기기간 있으면 이름 충돌 남
     }
     prod = {

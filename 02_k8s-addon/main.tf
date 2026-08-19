@@ -308,7 +308,8 @@ resource "kubernetes_ingress_v1" "app_ingress_backend" {
       "alb.ingress.kubernetes.io/certificate-arn"    = each.value.certificate_arn
       "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
       "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
-      "alb.ingress.kubernetes.io/healthcheck-path"   = "/api/actuator/health"
+      "alb.ingress.kubernetes.io/healthcheck-port"   = "8081"
+      "alb.ingress.kubernetes.io/healthcheck-path"   = "/actuator/health"
     }
   }
 
@@ -359,7 +360,7 @@ resource "kubernetes_ingress_v1" "app_ingress_frontend" {
       "alb.ingress.kubernetes.io/certificate-arn"    = each.value.certificate_arn
       "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
       "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
-      # healthcheck-path 안 줌 — 기본값 "/"이 frontend엔 이미 정상 응답이라 그대로 둠
+      "alb.ingress.kubernetes.io/healthcheck-path" = "/healthz"
     }
   }
 
