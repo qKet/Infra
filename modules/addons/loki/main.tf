@@ -59,6 +59,16 @@ resource "helm_release" "loki" {
             "eks.amazonaws.com/role-arn" = aws_iam_role.loki.arn
           }
         }
+
+        # 2026-08-19: persistence.enabled=false로 EBS 볼륨을 안 쓰기로 했는데, 이 차트 기본값은
+        # 컨테이너 파일시스템을 읽기전용(readOnlyRootFilesystem)으로 잠가둠 — 원래 EBS 볼륨이
+        # /var/loki 자리에 "쓰기 가능한 예외 구역"으로 마운트되는 걸 전제로 한 설정이라, EBS를
+        # 안 쓰면 /var/loki에 mkdir조차 못 해서 컨테이너가 계속 크래시함(CrashLoopBackOff).
+        # 여기서만 읽기전용을 풀어줌 — 파드 재시작 시 그 안 내용은 사라지지만(임시 디스크라
+        # 원래도 그런 용도), 컨테이너 자체를 다른 파일까지 함부로 바꿀 수 있게 되는 건 아님.
+        containerSecurityContext = {
+          readOnlyRootFilesystem = false
+        }
       }
 
       singleBinary = {
