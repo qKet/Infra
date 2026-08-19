@@ -60,15 +60,6 @@ resource "helm_release" "loki" {
           }
         }
 
-        # 2026-08-19: persistence.enabled=false로 EBS 볼륨을 안 쓰기로 했는데, 이 차트 기본값은
-        # 컨테이너 파일시스템을 읽기전용(readOnlyRootFilesystem)으로 잠가둠 — 원래 EBS 볼륨이
-        # /var/loki 자리에 "쓰기 가능한 예외 구역"으로 마운트되는 걸 전제로 한 설정이라, EBS를
-        # 안 쓰면 /var/loki에 mkdir조차 못 해서 컨테이너가 계속 크래시함(CrashLoopBackOff).
-        # 여기서만 읽기전용을 풀어줌 — 파드 재시작 시 그 안 내용은 사라지지만(임시 디스크라
-        # 원래도 그런 용도), 컨테이너 자체를 다른 파일까지 함부로 바꿀 수 있게 되는 건 아님.
-        containerSecurityContext = {
-          readOnlyRootFilesystem = false
-        }
       }
 
       singleBinary = {
@@ -80,7 +71,12 @@ resource "helm_release" "loki" {
           # 여기 로컬 디스크는 어차피 WAL(임시 버퍼)일 뿐이고 실제 로그는 위 S3에 저장되니,
           # EBS 없이 파드 안 임시 디스크(emptyDir)로 대체 — 파드가 재시작되면 최근 몇 분치
           # WAL만 유실될 수 있지만, S3에 이미 쓰인 로그는 영향 없음.
-          enabled = false
+          #
+          # enabled=false만 주면 차트가 볼륨 자체를 안 만들어서(대신 컨테이너 루트 파일시스템에
+          # 직접 쓰려다 읽기전용/권한 문제로 계속 크래시함) — type="emptyDir"로 명시해야
+          # 차트가 올바른 권한(fsGroup 등)으로 emptyDir 볼륨을 제대로 붙여줌.
+          enabled = true
+          type    = "emptyDir"
         }
       }
 
