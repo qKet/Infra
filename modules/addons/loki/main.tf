@@ -50,16 +50,19 @@ resource "helm_release" "loki" {
             }
           ]
         }
+      }
 
-        # IRSA로 인증하므로 access key/secret 불필요 — 서비스어카운트가 그대로 AWS 권한을 가짐
-        serviceAccount = {
-          create = true
-          name   = "loki"
-          annotations = {
-            "eks.amazonaws.com/role-arn" = aws_iam_role.loki.arn
-          }
+      # 2026-08-19: 원래 위 loki{} 블록 안에 넣었었는데 grafana/loki 차트는
+      # serviceAccount 설정을 최상위 키로만 인식함(loki.serviceAccount는 차트가 그냥 무시).
+      # 그래서 annotations가 실제 ServiceAccount 오브젝트에 하나도 안 붙어서
+      # IRSA가 작동 안 하고 파드가 "NoCredentialProviders"로 S3 접근을 계속 실패했었음.
+      # IRSA로 인증하므로 access key/secret 불필요 — 서비스어카운트가 그대로 AWS 권한을 가짐
+      serviceAccount = {
+        create = true
+        name   = "loki"
+        annotations = {
+          "eks.amazonaws.com/role-arn" = aws_iam_role.loki.arn
         }
-
       }
 
       singleBinary = {

@@ -146,4 +146,26 @@ resource "helm_release" "monitoring" {
     name  = "grafana.additionalDataSources[1].jsonData.defaultRegion"
     value = var.aws_region
   }
+
+  # Loki(로그 저장소, modules/addons/loki) — 클러스터 내부 서비스라 IAM/인증 불필요,
+  # CloudWatch/AMP처럼 access 정보 없이 그냥 내부 주소로 연결.
+  set {
+    name  = "grafana.additionalDataSources[2].name"
+    value = "Loki"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[2].type"
+    value = "loki"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[2].url"
+    value = "http://loki.monitoring.svc.cluster.local:3100"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[2].access"
+    value = "proxy"
+  }
 }

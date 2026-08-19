@@ -217,6 +217,11 @@ resource "kubernetes_config_map" "grafana_dashboards" {
 
   data = {
     "qket-monitoring.json" = file("${path.module}/dashboards/qket-monitoring.json")
+    # 2026-08-19: 백엔드/프론트(SSR)/브라우저(Faro) 로그를 매번 쿼리 바꿔가며 Explore에서
+    # 찾아보는 대신, 패널 3개로 한 화면에 고정해둔 대시보드. 3번째 패널(브라우저 이벤트)의
+    # 쿼리는 Alloy faro.receiver가 실제로 붙이는 라벨을 아직 확정 못 해서 임시로 텍스트
+    # 필터(|= "qket-frontend")만 걸어둠 — Grafana에서 실제 라벨 확인되면 라벨 매처로 교체 필요.
+    "qket-logs.json" = file("${path.module}/dashboards/qket-logs.json")
   }
 
   depends_on = [module.monitoring]
@@ -421,7 +426,11 @@ resource "kubernetes_ingress_v1" "faro_ingress" {
 
       http {
         path {
-          path      = "/faro-collector"
+          # 2026-08-19: 원래 "/faro-collector"였는데, Grafana Alloy의 faro.receiver는
+          # 요청 경로를 정확히 "/collect"로만 받음(다른 경로는 전부 404). ALB는 nginx와
+          # 달리 경로 rewrite 기능이 없어서, 브라우저가 보내는 실제 경로를 "/collect"로
+          # 맞춰야 함(프론트 NEXT_PUBLIC_FARO_COLLECTOR_URL도 같이 맞춰야 함, CI-release.yml 참고).
+          path      = "/collect"
           path_type = "Prefix"
 
           backend {
