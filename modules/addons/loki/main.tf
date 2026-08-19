@@ -64,13 +64,13 @@ resource "helm_release" "loki" {
       singleBinary = {
         replicas = 1
         persistence = {
-          # WAL(임시 버퍼)만 로컬 디스크에 두고, 실제 로그는 위 S3로 나감 — 이 볼륨이 날아가도
-          # (파드 재생성 등) 손실은 아주 최근(몇 분 이내) 로그 일부에 그침
-          size = "10Gi"
-          # 2026-08-19: 클러스터에 "gp2" StorageClass는 있지만 기본(default)로 지정돼 있지 않아서
-          # (kubectl get storageclass에 (default) 표시 없음), PVC가 storageClassName을 명시 안 하면
-          # 매칭될 클래스가 없어 영원히 Pending으로 남음 — 그래서 여기서 명시적으로 지정.
-          storageClass = "gp2"
+          # 2026-08-19: 처음엔 EBS(PVC)로 시도했는데, 스케줄러와 EBS 프로비저너 사이에서
+          # "PVC가 동시에 수정됨" 경합이 계속 반복돼서 파드가 영원히 Pending에 머무름
+          # (재시도/재생성으로도 안 풀림 — 일회성 버그가 아니라 이 클러스터 환경에서 반복 재현됨).
+          # 여기 로컬 디스크는 어차피 WAL(임시 버퍼)일 뿐이고 실제 로그는 위 S3에 저장되니,
+          # EBS 없이 파드 안 임시 디스크(emptyDir)로 대체 — 파드가 재시작되면 최근 몇 분치
+          # WAL만 유실될 수 있지만, S3에 이미 쓰인 로그는 영향 없음.
+          enabled = false
         }
       }
 
