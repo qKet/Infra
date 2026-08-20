@@ -97,16 +97,6 @@ output "eks_cluster_security_group_id" {
   value       = module.eks.cluster_security_group_id
 }
 
-output "eks_node_group_status" {
-  description = "노드그룹 상태"
-  value       = module.eks.node_group_status
-}
-
-output "eks_node_role_arn" {
-  description = "워커 노드 IAM 역할 ARN"
-  value       = module.eks.node_role_arn
-}
-
 output "oidc_provider_arn" {
   description = "EKS 클러스터 OIDC 프로바이더 ARN — release/prod의 IRSA 역할들이 이 값을 참조"
   value       = module.eks.oidc_provider_arn

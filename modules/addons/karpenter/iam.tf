@@ -99,6 +99,35 @@ data "aws_iam_policy_document" "karpenter_controller" {
     actions   = ["sqs:DeleteMessage", "sqs:GetQueueUrl", "sqs:ReceiveMessage"]
     resources = [aws_sqs_queue.karpenter_interruption.arn]
   }
+
+  # Karpenter는 EC2NodeClass.spec.role(Node Role 이름)만 주어지면, 매칭되는 Instance Profile이
+  # 없을 경우 자기가 직접 생성/조회/삭제까지 함(2026-08-20 실측: GetInstanceProfile 403으로
+  # NodePool/EC2NodeClass가 계속 Not Ready 상태에 머무름). Node Role의 aws_iam_instance_profile은
+  # modules/eks 기존 노드그룹 방식 그대로 남겨뒀지만, Karpenter는 이걸 쓰지 않고 스스로 동적 생성하는
+  # 구조라 별도로 이 권한이 필요 — AWS 공식 Karpenter controller policy의 표준 항목.
+  statement {
+    sid    = "InstanceProfileManage"
+    effect = "Allow"
+    actions = [
+      "iam:CreateInstanceProfile",
+      "iam:TagInstanceProfile",
+      "iam:AddRoleToInstanceProfile",
+      "iam:RemoveRoleFromInstanceProfile",
+      "iam:DeleteInstanceProfile",
+      "iam:GetInstanceProfile",
+    ]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:instance-profile/*"]
+  }
+
+  # iam:ListInstanceProfiles는 AWS IAM 특성상 리소스 레벨 제한을 지원하지 않는 액션이라
+  # resources를 "*"로 둬야 함(2026-08-20 실측: instance-profile/* 로 스코프하니 이 액션만
+  # 별도로 다시 AccessDenied 발생). Karpenter의 오래된 instance profile 정리(가비지 컬렉션)에 사용.
+  statement {
+    sid       = "InstanceProfileList"
+    effect    = "Allow"
+    actions   = ["iam:ListInstanceProfiles"]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "karpenter_controller" {

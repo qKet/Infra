@@ -114,28 +114,14 @@ module "alb_controller" {
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
 }
 
-# Cluster Autoscaler — EKS 노드그룹(modules/eks)의 desired_size를 min~max(01_infrastructure/
-# variables.tf, 지금 1~3) 사이에서 자동 조절. KEDA(파드 오토스케일링)가 replica를 늘려도 이게
-# 없으면 그 파드들이 노드 부족으로 Pending에 멈춤 — 2026-08-18 대용량 트래픽 용량 분석에서 발견
-# (CLAUDE_LLM_WIKI decisions/2026-08-18-capacity-planning-large-traffic-readiness 참고).
-# Karpenter 대신 이걸 고른 이유는 modules/addons/cluster-autoscaler/main.tf 주석 참고.
-module "cluster_autoscaler" {
-  source = "../modules/addons/cluster-autoscaler"
+# Cluster Autoscaler — 2026-08-20 Karpenter 마이그레이션 3단계로 완전히 제거함(방식 A: 전면
+# 교체). 이전에는 EKS 노드그룹(modules/eks)의 desired_size를 min~max(01_infrastructure/
+# variables.tf) 사이에서 자동 조절했으나, 이제 module.karpenter가 그 역할을 전담.
+# 3-1에서 helm_release만 먼저 destroy(2026-08-20)로 검증 후, 이 단계에서 모듈 전체 제거.
+# 과거 코드는 git history(이 커밋 이전)에서 확인 가능.
 
-  project_name = var.project_name
-  aws_region   = var.aws_region
-  cluster_name = data.terraform_remote_state.infrastructure.outputs.eks_cluster_name
-  eks_version  = data.terraform_remote_state.infrastructure.outputs.eks_version
-
-  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
-  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
-
-  depends_on = [module.alb_controller]
-}
-
-# Karpenter 마이그레이션 1단계 — IAM/SQS만 먼저 준비(Controller Role, Node Role/Instance
-# Profile, 인터럽션 큐). 아직 Helm 설치/EC2NodeClass/NodePool은 없어서 실제로 노드를 만들진
-# 않음 — cluster_autoscaler는 계속 그대로 동작 중. 2단계에서 Helm 설치를 추가할 예정.
+# Karpenter — cluster-autoscaler를 대체하는 노드 오토스케일러. 1단계(IAM/SQS) → 2단계(Helm/
+# EC2NodeClass/NodePool) → 3단계(cluster-autoscaler 제거, 2026-08-20 진행 중)까지 완료.
 module "karpenter" {
   source = "../modules/addons/karpenter"
 

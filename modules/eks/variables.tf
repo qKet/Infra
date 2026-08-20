@@ -13,27 +13,7 @@ variable "cluster_subnet_ids" {
   type        = list(string)
 }
 
-variable "node_subnet_ids" {
-  description = "워커 노드가 배치될 서브넷 (프라이빗-일반)"
-  type        = list(string)
-}
-
-variable "node_instance_types" {
-  description = "노드그룹 EC2 인스턴스 타입"
-  type        = list(string)
-}
-
-variable "node_desired_size" {
-  description = "노드그룹 기본 노드 수"
-  type        = number
-}
-
-variable "node_min_size" {
-  description = "노드그룹 최소 노드 수"
-  type        = number
-}
-
-variable "node_max_size" {
-  description = "노드그룹 최대 노드 수"
-  type        = number
-}
+# node_subnet_ids/node_instance_types/node_desired_size/node_min_size/node_max_size는
+# 2026-08-20 Karpenter 마이그레이션 3-4(정리)로 제거함 — 전부 관리형 노드그룹(3-3에서 제거)
+# 전용 변수였음. 노드 크기/서브넷 결정은 이제 02_k8s-addon/module.karpenter의 NodePool/
+# EC2NodeClass가 담당.

@@ -21,24 +21,8 @@ resource "aws_eks_cluster" "this" {
   depends_on = [aws_iam_role_policy_attachment.eks_cluster]
 }
 
-# 워커 노드 그룹 — 프라이빗(일반) 서브넷에만 배치 (private-data는 제외)
-resource "aws_eks_node_group" "this" {
-  cluster_name    = aws_eks_cluster.this.name
-  node_group_name = "${var.project_name}-node-group"
-  node_role_arn   = aws_iam_role.eks_node.arn
-  subnet_ids      = var.node_subnet_ids
-
-  instance_types = var.node_instance_types
-
-  scaling_config {
-    desired_size = var.node_desired_size
-    min_size     = var.node_min_size
-    max_size     = var.node_max_size
-  }
-
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_node_worker,
-    aws_iam_role_policy_attachment.eks_node_cni,
-    aws_iam_role_policy_attachment.eks_node_ecr,
-  ]
-}
+# 워커 노드 그룹 — 2026-08-20 Karpenter 마이그레이션 3단계로 완전히 제거함(방식 A: 전면 교체).
+# 기존에는 여기서 관리형 노드그룹(aws_eks_node_group.this)을 직접 만들었으나, 이제 노드 생성/
+# 삭제는 02_k8s-addon/module.karpenter가 전담. IAM Role(eks_node, iam.tf)은 과거 노드가 이미
+# assume했던 역할이라 흔적 정리 차원에서 일단 남겨둠(3-4 정리 단계에서 필요 여부 재검토 예정).
+# 과거 코드는 git history(이 커밋 이전)에서 확인 가능.

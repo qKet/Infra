@@ -38,15 +38,6 @@ output "cluster_security_group_id" {
   value       = aws_eks_cluster.this.vpc_config[0].cluster_security_group_id
 }
 
-output "node_group_status" {
-  description = "노드그룹 상태"
-  value       = aws_eks_node_group.this.status
-}
-
-output "node_role_arn" {
-  description = "워커 노드 IAM 역할 ARN"
-  value       = aws_iam_role.eks_node.arn
-}
 
 output "cluster_admin_role_arn" {
   description = "클러스터 admin 접근용 공유 IAM Role ARN — kubectl에서 이 role을 assume해서 접속"

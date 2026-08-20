@@ -26,8 +26,13 @@ locals {
       skip_final_snapshot         = true
       deletion_protection         = false
       redis_node_type             = "cache.t3.micro"
-      force_destroy               = false 
+      force_destroy               = false
       secret_recovery_window_days = 0     # 바로 삭제 — 자주 재생성하는 샌드박스라 대기기간 있으면 이름 충돌 남
+      # 2026-08-19: SPOF 대응 failover를 release에서 먼저 켜서 실제로 동작하는지 검증 —
+      # prod로 넓히기 전에 여기서 문제 없는지 확인하는 용도(release가 매일 재생성되니 검증 비용도 낮음).
+      redis_num_cache_clusters         = 2
+      redis_automatic_failover_enabled = true
+      redis_multi_az_enabled           = true
     }
     prod = {
       db_instance_class           = "db.t3.small"
@@ -39,6 +44,10 @@ locals {
       redis_node_type             = "cache.t3.small"
       force_destroy               = false
       secret_recovery_window_days = 7 # 실수 삭제 대비 — 7일 대기 후 진짜 삭제
+      # 2026-08-19: release에서 failover 검증 끝나면 여기도 true로 전환 예정(현재는 의도적으로 미적용).
+      redis_num_cache_clusters         = 1
+      redis_automatic_failover_enabled = false
+      redis_multi_az_enabled           = false
     }
   }
 
@@ -130,6 +139,10 @@ module "redis" {
 
   redis_node_type      = local.env_config.redis_node_type
   redis_engine_version = var.redis_engine_version
+
+  num_cache_clusters         = local.env_config.redis_num_cache_clusters
+  automatic_failover_enabled = local.env_config.redis_automatic_failover_enabled
+  multi_az_enabled           = local.env_config.redis_multi_az_enabled
 }
 
 module "storage" {

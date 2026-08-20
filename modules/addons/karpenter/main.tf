@@ -33,6 +33,67 @@ resource "helm_release" "karpenter" {
     value = aws_iam_role.karpenter_controller.arn
   }
 
+  # Karpenter 차트 기본값은 nodeAffinity(karpenter.sh/nodepool DoesNotExist, "자기가 만든 노드엔
+  # 못 올라감")/podAntiAffinity(호스트 분산)/topologySpreadConstraints(AZ 분산)를 전부
+  # requiredDuringScheduling(강제)로 건다. 2026-08-20 관리형 노드그룹을 완전히 제거하고 나니
+  # (3단계), Karpenter가 올라갈 수 있는 "자기가 안 만든" 노드가 하나도 안 남아 컨트롤러 자체가
+  # Pending에 멈추는 완전한 데드락 발생(신규 노드 프로비저닝 불가 → 재시작될 때마다 재발).
+  # affinity를 통째로 비우는 시도(affinity={})는 Helm 템플릿이 "빈 값=미설정"으로 보고 기본값
+  # (강제 규칙)으로 그대로 폴백해서 효과가 없었음(2026-08-20 실측) — 대신 required를 preferred로
+  # 바꿔서 "가능하면 분산, 안 되면 그냥 배치"로 완화. 분산 의도 자체는 유지하면서 데드락만 제거.
+  values = [
+    yamlencode({
+      replicas = 1
+      affinity = {
+        nodeAffinity = {
+          # Helm의 values 병합은 "덮어쓰기"가 아니라 "병합"이라, preferred만 추가하면 차트 기본값의
+          # required는 그대로 남아있음(2026-08-20 첫 시도 실측) — required 키를 명시적으로 null로
+          # 지정해야 Helm이 병합 결과에서 그 키 자체를 삭제함(Helm 공식 지원 동작).
+          requiredDuringSchedulingIgnoredDuringExecution = null
+          preferredDuringSchedulingIgnoredDuringExecution = [
+            {
+              weight = 1
+              preference = {
+                matchExpressions = [
+                  { key = "karpenter.sh/nodepool", operator = "DoesNotExist" }
+                ]
+              }
+            }
+          ]
+        }
+        podAntiAffinity = {
+          preferredDuringSchedulingIgnoredDuringExecution = [
+            {
+              weight = 1
+              podAffinityTerm = {
+                labelSelector = {
+                  matchLabels = {
+                    "app.kubernetes.io/instance" = "karpenter"
+                    "app.kubernetes.io/name"     = "karpenter"
+                  }
+                }
+                topologyKey = "kubernetes.io/hostname"
+              }
+            }
+          ]
+        }
+      }
+      topologySpreadConstraints = [
+        {
+          maxSkew           = 1
+          topologyKey       = "topology.kubernetes.io/zone"
+          whenUnsatisfiable = "ScheduleAnyway"
+          labelSelector = {
+            matchLabels = {
+              "app.kubernetes.io/instance" = "karpenter"
+              "app.kubernetes.io/name"     = "karpenter"
+            }
+          }
+        }
+      ]
+    })
+  ]
+
   # cluster-autoscaler와 동일 계열 addon이라 동일 톨러레이션/우선순위 정책 적용 안 함 —
   # 차트 기본값(system-cluster-critical)을 그대로 씀.
 

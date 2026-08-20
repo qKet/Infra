@@ -48,5 +48,8 @@ resource "aws_eks_addon" "ebs_csi" {
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
-  depends_on = [aws_eks_node_group.this]
+  # 예전엔 관리형 노드그룹(aws_eks_node_group.this)이 뜬 뒤에 addon을 설치하도록 순서를
+  # 강제했으나, 노드그룹 제거(2026-08-20 3단계)로 그 리소스가 사라져서 depends_on도 제거함 —
+  # 이제 노드는 Karpenter(별도 root의 module.karpenter)가 만들고, addon 자체는 클러스터
+  # 레벨 리소스라 노드 존재 여부와 무관하게 설치 가능.
 }

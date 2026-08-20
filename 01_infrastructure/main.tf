@@ -95,13 +95,10 @@ module "eks" {
   project_name = var.project_name
   eks_version  = var.eks_version
 
+  # node_subnet_ids/node_instance_types/node_desired_size/node_min_size/node_max_size는
+  # 2026-08-20 Karpenter 마이그레이션 3-4(정리)로 제거함 — 관리형 노드그룹(3-3에서 제거) 전용
+  # 인자였음. 노드 프로비저닝은 이제 02_k8s-addon/module.karpenter가 전담.
   cluster_subnet_ids = concat(data.terraform_remote_state.network.outputs.public_subnet_ids, data.terraform_remote_state.network.outputs.private_general_subnet_ids)
-  node_subnet_ids    = data.terraform_remote_state.network.outputs.private_general_subnet_ids
-
-  node_instance_types = var.node_instance_types
-  node_desired_size   = var.node_desired_size
-  node_min_size       = var.node_min_size
-  node_max_size       = var.node_max_size
 }
 
 module "ec2" {

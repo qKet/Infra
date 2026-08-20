@@ -38,35 +38,11 @@ variable "eks_version" {
   default     = "1.36" # 추후에 1.36으로 버전업 예정
 }
 
-variable "node_instance_types" {
-  description = "노드그룹 EC2 인스턴스 타입"
-  type        = list(string)
 
-  # 2026-08-19 야간 멘토링: 포트폴리오/테스트 환경에서 t3.xlarge까지 잡을 필요 없음(용량 산정에
-  # 집착하지 말고, 평상시 기준을 낮게 잡고 오토스케일링으로 대응하는 게 핵심) — 처음엔 t3.medium까지
-  # 낮췄다가, 지금 떠 있는 애드온 스택(Loki/Promtail/Grafana/ArgoCD/KEDA/ALB Controller/EBS CSI 등)
-  # 규모에 t3.medium(2vCPU/4GB, 파드 한도 약 17개)은 부족해서 "Insufficient memory"/"Too many pods"로
-  # 스케줄링 실패가 계속 발생함(2026-08-19 실측). t3.large(2vCPU/8GB, 파드 한도 약 35개)로 절충.
-  default     = ["t3.large"]
-}
-
-variable "node_desired_size" {
-  description = "노드그룹 기본 노드 수"
-  type        = number
-  default     = 2
-}
-
-variable "node_min_size" {
-  description = "노드그룹 최소 노드 수"
-  type        = number
-  default     = 1
-}
-
-variable "node_max_size" {
-  description = "노드그룹 최대 노드 수"
-  type        = number
-  default     = 4
-}
+# node_instance_types/node_desired_size/node_min_size/node_max_size는 2026-08-20 Karpenter
+# 마이그레이션 3-4(정리)로 제거함 — 관리형 노드그룹(3-3에서 제거) 전용 변수였음. 인스턴스
+# 타입/스케일 범위는 이제 02_k8s-addon/modules/addons/karpenter/variables.tf의
+# node_instance_types(NodePool 후보군)가 대신함.
 
 /*******************
 *     Bastion (SSM)
