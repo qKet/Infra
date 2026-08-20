@@ -1,0 +1,31 @@
+{{- if .Values.pilot.enabled }}
+# 라우팅 규칙 — 오늘 app_ingress_backend/app_ingress_frontend 두 개의 Ingress가 하던 일을
+# 규칙 2개로 합쳤다. healthcheck-path가 Ingress 오브젝트 단위로만 적용돼서 어쩔 수 없이
+# Ingress를 둘로 쪼갰던 제약(admin-ingress-shared-alb.md 참고)이, TargetGroupConfiguration이
+# 서비스 단위이기 때문에 Gateway API에서는 아예 사라진다.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qket-gw-pilot-route
+  namespace: {{ .Values.pilot.namespace }}
+spec:
+  parentRefs:
+    - name: qket-gw-pilot
+  hostnames:
+    - {{ .Values.pilot.hostname }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: {{ .Values.pilot.backend.serviceName }}
+          port: {{ .Values.pilot.backend.servicePort }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ .Values.pilot.frontend.serviceName }}
+          port: {{ .Values.pilot.frontend.servicePort }}
+{{- end }}

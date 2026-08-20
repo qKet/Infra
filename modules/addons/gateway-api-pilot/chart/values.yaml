@@ -1,0 +1,27 @@
+# modules/addons/gateway-api-crds가 만드는 GatewayClass 이름 — 여긴 그걸 참조만 함.
+gatewayClassName: alb
+
+# 1단계 파일럿: release 환경에 테스트 호스트네임으로 검증용 Gateway/HTTPRoute를 하나 띄운다.
+# 실제 dev.jun979.click/app.jun979.click 컷오버는 여기 없음 — 기존 kubernetes_ingress_v1이 계속 담당.
+pilot:
+  enabled: true
+  namespace: qket-release
+  hostname: gw-dev.jun979.click
+  # 기존 Ingress가 쓰는 "team5-qket-alb"와 겹치지 않는 별도 이름 — 파일럿은 별도 ALB로 뜬다
+  # (Gateway API는 기존 Ingress가 만든 ALB에 붙는 방법이 없어서 100% 새 ALB가 생김).
+  loadBalancerName: team5-qket-gw-pilot-alb
+
+  backend:
+    serviceName: qket-backend-service
+    servicePort: 80
+    healthCheckPort: "8081"
+    healthCheckPath: /actuator/health
+
+  frontend:
+    serviceName: qket-frontend-service
+    servicePort: 80
+    healthCheckPath: /healthz
+
+  tags:
+    Team: team5
+    Project: qket
