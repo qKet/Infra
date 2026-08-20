@@ -1,0 +1,25 @@
+{{- if .Values.pilot.enabled }}
+# 리스너(포트/프로토콜/호스트네임) 설정 — 이 오브젝트 하나가 ALB 하나에 대응한다.
+# 오늘 Ingress 2개(backend/frontend)가 group.name으로 ALB 하나를 공유하던 것과 달리,
+# Gateway API에서는 Gateway 하나에 HTTPRoute 여러 개가 붙는 구조라 group.name 트릭이 필요 없다.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: qket-gw-pilot
+  namespace: {{ .Values.pilot.namespace }}
+spec:
+  gatewayClassName: {{ .Values.gatewayClassName }}
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: {{ .Values.pilot.hostname }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+  infrastructure:
+    parametersRef:
+      group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
+      name: qket-gw-pilot-lbconfig
+{{- end }}
