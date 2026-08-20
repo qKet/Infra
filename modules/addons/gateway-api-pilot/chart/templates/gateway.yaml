@@ -2,6 +2,11 @@
 # 리스너(포트/프로토콜/호스트네임) 설정 — 이 오브젝트 하나가 ALB 하나에 대응한다.
 # 오늘 Ingress 2개(backend/frontend)가 group.name으로 ALB 하나를 공유하던 것과 달리,
 # Gateway API에서는 Gateway 하나에 HTTPRoute 여러 개가 붙는 구조라 group.name 트릭이 필요 없다.
+#
+# 리스너을 http(80)/https(443) 둘 다 두는 이유 — 오늘 Ingress의 ssl-redirect=443과 동일한 효과를
+# 내려면 http:80은 트래픽을 안 받고 https로 리다이렉트만 하게 해야 함. 실제 리다이렉트 규칙은
+# httproute.yaml의 별도 HTTPRoute(RequestRedirect filter, sectionName: http)가 담당하고, 실제
+# 서비스 라우팅은 https 리스너(sectionName: https)에 붙는 HTTPRoute가 담당한다.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -17,6 +22,15 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    {{- if .Values.pilot.certificateArn }}
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: {{ .Values.pilot.hostname }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
   infrastructure:
     parametersRef:
       group: gateway.k8s.aws

@@ -1,0 +1,32 @@
+# http:80 리스너 전용 — 셋 다 트래픽을 안 받고 https로 리다이렉트만 함(오늘 Ingress의
+# ssl-redirect=443과 동일). hostname을 filter에서 안 정하면 요청 자체의 Host 헤더를 그대로
+# 써서 리다이렉트하므로, 호스트네임 3개를 이 라우트 하나로 다 처리할 수 있다.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qket-gw-admin-https-redirect
+  namespace: {{ .Values.admin.namespace }}
+spec:
+  parentRefs:
+    - name: qket-gw-admin
+      sectionName: http
+  hostnames:
+    {{- if .Values.admin.grafana.certificateArn }}
+    - {{ .Values.admin.grafana.hostname }}
+    {{- end }}
+    {{- if .Values.admin.argocd.certificateArn }}
+    - {{ .Values.admin.argocd.hostname }}
+    {{- end }}
+    {{- if .Values.admin.dev.certificateArn }}
+    - {{ .Values.admin.dev.hostname }}
+    {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301

@@ -1,0 +1,21 @@
+{{- if .Values.admin.grafana.certificateArn }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qket-gw-admin-grafana-route
+  namespace: {{ .Values.admin.namespace }}
+spec:
+  parentRefs:
+    - name: qket-gw-admin
+      sectionName: grafana-https
+  hostnames:
+    - {{ .Values.admin.grafana.hostname }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ .Values.admin.grafana.serviceName }}
+          port: {{ .Values.admin.grafana.servicePort }}
+{{- end }}

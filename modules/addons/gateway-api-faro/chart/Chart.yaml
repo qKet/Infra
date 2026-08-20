@@ -1,0 +1,9 @@
+apiVersion: v2
+name: gateway-api-faro
+description: >
+  Grafana Alloy Faro 수집 엔드포인트(alloy-faro, monitoring 네임스페이스)를 release/prod
+  HTTPRoute들이 cross-namespace로 참조할 수 있게 하는 ReferenceGrant + 그 Service용
+  TargetGroupConfiguration. release/prod가 같은 alloy-faro Service를 공유해서 여기 한 번만
+  만든다 — modules/addons/gateway-api-pilot에 env별로 중복 생성하면 monitoring 네임스페이스
+  안에서 같은 이름의 오브젝트를 두 helm_release가 동시에 소유하려다 충돌한다.
+version: 0.1.2

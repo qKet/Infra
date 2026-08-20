@@ -74,109 +74,15 @@ locals {
   admin_allowed_cidrs = [
     "222.111.119.115/32", # 윤준
     "121.138.193.90/32",  # 채영
-    "121.128.146.191/32", # 진호
+    "162.120.184.59/32",  # 진호
     "123.214.77.21/32"    # 우진
   ]
 }
 
-resource "kubernetes_ingress_v1" "grafana" {
-  metadata {
-    name      = "grafana-ingress"
-    namespace = "monitoring"
-
-    annotations = {
-      "alb.ingress.kubernetes.io/group.name"         = "qket-admin"
-      "alb.ingress.kubernetes.io/group.order"        = "10"
-      "alb.ingress.kubernetes.io/tags"               = "Team=team5,Project=qket"
-      "alb.ingress.kubernetes.io/load-balancer-name" = "team5-qket-admin-alb"
-      "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"        = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"    = aws_acm_certificate_validation.grafana.certificate_arn
-      "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
-      "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
-      "alb.ingress.kubernetes.io/inbound-cidrs"      = join(",", local.admin_allowed_cidrs)
-      # 기본 헬스체크 경로("/")는 로그인 안 된 상태에서 302를 줘서 비정상으로 뜸(backend 때와 같은
-      # 종류의 문제) — Grafana 전용 헬스 엔드포인트(로그인 여부 무관하게 200 고정)로 지정.
-      "alb.ingress.kubernetes.io/healthcheck-path" = "/api/health"
-    }
-  }
-
-  spec {
-    ingress_class_name = "alb"
-
-    rule {
-      host = "grafana.jun979.click"
-
-      http {
-        path {
-          path      = "/"
-          path_type = "Prefix"
-
-          backend {
-            service {
-              name = "monitoring-grafana"
-              port {
-                number = 80
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  wait_for_load_balancer = false
-
-  depends_on = [module.alb_controller, module.monitoring]
-}
-
-resource "kubernetes_ingress_v1" "argocd" {
-  metadata {
-    name      = "argocd-ingress"
-    namespace = "argocd"
-
-    annotations = {
-      "alb.ingress.kubernetes.io/group.name"         = "qket-admin"
-      "alb.ingress.kubernetes.io/group.order"        = "20"
-      "alb.ingress.kubernetes.io/tags"               = "Team=team5,Project=qket"
-      "alb.ingress.kubernetes.io/load-balancer-name" = "team5-qket-admin-alb"
-      "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"        = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"    = aws_acm_certificate_validation.argocd.certificate_arn
-      "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
-      "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
-      "alb.ingress.kubernetes.io/inbound-cidrs"      = join(",", local.admin_allowed_cidrs)
-      # Grafana와 같은 이유 — argocd-server 자체 readiness probe 경로(/healthz)를 그대로 씀,
-      # 로그인 여부 무관하게 200 고정이라 안전함.
-      "alb.ingress.kubernetes.io/healthcheck-path" = "/healthz"
-    }
-  }
-
-  spec {
-    ingress_class_name = "alb"
-
-    rule {
-      host = "cd.jun979.click"
-
-      http {
-        path {
-          path      = "/"
-          path_type = "Prefix"
-
-          backend {
-            service {
-              name = "argocd-server"
-              port {
-                number = 80
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  wait_for_load_balancer = false
-
-  depends_on = [module.alb_controller, helm_release.argocd]
-}
+# 2026-08-20: kubernetes_ingress_v1.grafana/argocd를 여기서 완전히 제거 — Gateway API로 이관.
+# 인증서(aws_acm_certificate.grafana/argocd)는 그대로 재사용하고, 실제 Gateway/HTTPRoute/
+# LoadBalancerConfiguration(sourceRanges = local.admin_allowed_cidrs)은
+# module.gateway_api_admin(02_k8s-addon/main.tf)이 만든다 — dev(release)도 "개발 서버는
+# 관리자만 들어가야 한다"는 결정에 따라 같은 admin Gateway로 옮겨서 이 3개가 ALB 하나(SNI 다중
+# 인증서)와 IP 허용목록을 공유한다. 자세한 내용은 CLAUDE_LLM_WIKI
+# decisions/2026-08-20-ingress-to-gateway-api-migration 참고.

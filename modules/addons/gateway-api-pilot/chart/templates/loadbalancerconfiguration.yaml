@@ -1,6 +1,5 @@
 {{- if .Values.pilot.enabled }}
-# ALB 자체의 AWS 쪽 설정 — 오늘 Ingress의 scheme/tags/load-balancer-name annotation에 해당.
-# TLS/인증서는 일부러 안 넣음(파일럿은 테스트 호스트네임이라 전용 ACM 인증서가 없음, HTTP:80으로만 검증).
+# ALB 자체의 AWS 쪽 설정 — 오늘 Ingress의 scheme/tags/load-balancer-name/certificate-arn annotation에 해당.
 apiVersion: gateway.k8s.aws/v1
 kind: LoadBalancerConfiguration
 metadata:
@@ -9,6 +8,11 @@ metadata:
 spec:
   loadBalancerName: {{ .Values.pilot.loadBalancerName }}
   scheme: internet-facing
+  {{- if .Values.pilot.certificateArn }}
+  listenerConfigurations:
+    - protocolPort: "HTTPS:443"
+      defaultCertificate: {{ .Values.pilot.certificateArn }}
+  {{- end }}
   tags:
     {{- range $k, $v := .Values.pilot.tags }}
     {{ $k }}: {{ $v | quote }}

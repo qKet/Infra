@@ -1,0 +1,9 @@
+faro:
+  serviceName: alloy-faro
+  namespace: monitoring
+  # release/prod HTTPRoute(qket-release/qket-prod 네임스페이스)가 이 Service를 cross-namespace로
+  # 참조하도록 허용할 네임스페이스 목록 — Terraform이 local.ingress_config의 키(release/prod)로
+  # 채워서 넘겨준다.
+  allowedNamespaces:
+    - qket-release
+    - qket-prod

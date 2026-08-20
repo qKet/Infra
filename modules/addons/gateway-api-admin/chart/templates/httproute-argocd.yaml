@@ -1,0 +1,25 @@
+{{- if .Values.admin.argocd.certificateArn }}
+# argocd-server가 있는 argocd 네임스페이스에 둠 — Gateway(monitoring 네임스페이스)와 달라서
+# Gateway의 allowedRoutes.namespaces.from: All이 필요(gateway.yaml 참고). backendRef는 같은
+# 네임스페이스 안이라 ReferenceGrant 불필요.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qket-gw-admin-argocd-route
+  namespace: {{ .Values.admin.argocd.namespace }}
+spec:
+  parentRefs:
+    - name: qket-gw-admin
+      namespace: {{ .Values.admin.namespace }}
+      sectionName: argocd-https
+  hostnames:
+    - {{ .Values.admin.argocd.hostname }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ .Values.admin.argocd.serviceName }}
+          port: {{ .Values.admin.argocd.servicePort }}
+{{- end }}

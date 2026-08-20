@@ -1,0 +1,10 @@
+apiVersion: v2
+name: gateway-api-admin
+description: >
+  관리 도구(Grafana/ArgoCD) + dev(release) 환경을 팀원 IP 허용목록 하나로 묶어서 서빙하는
+  Gateway API 오브젝트. 오늘 admin-ingress.tf의 kubernetes_ingress_v1.grafana/argocd를
+  완전히 대체하고, dev.jun979.click도 공개 ALB(gateway-api-app)에서 이쪽으로 옮겨온다 —
+  "개발 서버는 관리자만 들어가야 한다"는 결정(2026-08-20)에 따른 것. 세 도메인이 ALB 하나(SNI로
+  인증서 여러 개 붙임)와 보안그룹(sourceRanges) 하나를 공유한다 — 오늘 Ingress가 group.name으로
+  하던 것과 동일한 이유(4인 팀 규모에선 "팀원이면 셋 다 접속 가능, 아니면 셋 다 차단"이면 충분).
+version: 0.1.0
