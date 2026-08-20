@@ -15,6 +15,9 @@ import { Counter, Trend } from 'k6/metrics';
 const BASE = 'https://dev.jun979.click/api';
 const ROUND_ID = 18;
 
+// 0~RAMP_SECONDS초 사이 무작위로 대기해서 커넥션 개설을 몇 초에 걸쳐 분산시킨다.
+const RAMP_SECONDS = Number(__ENV.RAMP_SECONDS) || 10;
+
 const reservationSuccess = new Counter('reservation_success');
 const reservationGiveUp = new Counter('reservation_give_up'); // 매진/대기열 만료로 포기
 const reservationBug = new Counter('reservation_unexpected_fail'); // 200이 아닌 응답 = 진짜 버그
@@ -27,9 +30,11 @@ export const options = {
       executor: 'per-vu-iterations',
       vus: 2000,
       iterations: 1,
-      maxDuration: '40m', // 좌석(2000석)보다 인원(4000명)이 많은 오픈런 시나리오 — 절반은 매진으로 실패하는 게 정상
+      maxDuration: '40m', // 좌석 2000석에 인원 2000명 — 경합은 있지만 전원 매진 실패가 정상은 아님
     },
   },
+  // macOS용 무거운 경로를 회피.
+  insecureSkipTLSVerify: true,
   thresholds: {
     reservation_unexpected_fail: ['count==0'], // 이게 0이 아니면 락/서버 버그 의심
   },
@@ -38,6 +43,10 @@ export const options = {
 export default function () {
   const userId = `loadtest${String(__VU).padStart(4, '0')}`;
   const headers = { 'Content-Type': 'application/json' };
+
+  // VU마다 시작 시점을 0~RAMP_SECONDS초 사이로 흩어서 커넥션 개설이 진짜 한순간에 안 몰리게 함
+  // (위 RAMP_SECONDS 주석 참고 — ALB TLS negotiation 실패 방지).
+  sleep(Math.random() * RAMP_SECONDS);
 
   // 1. 로그인 (bcrypt 검증 → Redis 세션 생성)
   const loginRes = http.post(

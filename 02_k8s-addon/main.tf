@@ -131,16 +131,75 @@ module "alb_controller" {
   depends_on = [module.gateway_api_crds]
 }
 
-# Gateway API 1단계 파일럿 오브젝트(Gateway/HTTPRoute/LoadBalancerConfiguration/
-# TargetGroupConfiguration) — module.gateway_api_crds와 반대로, 이 모듈은 module.alb_controller
-# "다음"에 있어야 한다(그 컨트롤러 자신의 Helm 차트가 LoadBalancerConfiguration/
-# TargetGroupConfiguration CRD를 제공하기 때문 — modules/addons/gateway-api-pilot/main.tf 주석
-# 참고). kubernetes_namespace.qket["release"]에 리소스를 만들므로 그것도 depends_on에 포함.
-# 기존 app_ingress_backend/app_ingress_frontend(dev.jun979.click 실트래픽)는 이 모듈과 전혀 무관.
-module "gateway_api_pilot" {
-  source = "../modules/addons/gateway-api-pilot"
+# Gateway API — prod 실제 컷오버(Ingress 완전 대체). prod는 아직 실서비스 오픈 전이라(2026-08-20
+# 기준) release와 함께 한 번에 진행했었는데, 같은 날 후속으로 release(dev.jun979.click)는
+# "개발 서버는 관리자만 들어가야 한다"는 결정에 따라 공개 ALB에서 admin Gateway
+# (module.gateway_api_admin)로 옮기고 여기서는 빠짐 — 그래서 for_each가 prod만 남음.
+# module.gateway_api_crds와 반대로, 이 모듈은 module.alb_controller "다음"에 있어야 한다(그
+# 컨트롤러 자신의 Helm 차트가 LoadBalancerConfiguration/TargetGroupConfiguration CRD를 제공하기
+# 때문 — modules/addons/gateway-api-crds/main.tf 주석 참고). alloy-faro Service를
+# cross-namespace로 참조하므로 module.gateway_api_faro(ReferenceGrant)에도 의존.
+locals {
+  ingress_config_public = { for k, v in local.ingress_config : k => v if k != "release" }
+}
+
+module "gateway_api_app" {
+  source   = "../modules/addons/gateway-api-pilot"
+  for_each = local.ingress_config_public
+
+  env                = each.key
+  namespace          = kubernetes_namespace.qket[each.key].metadata[0].name
+  hostname           = each.value.host
+  certificate_arn    = each.value.certificate_arn
+  load_balancer_name = "team5-qket-gw-${each.key}-alb"
+
+  depends_on = [
+    module.alb_controller,
+    module.gateway_api_crds,
+    module.gateway_api_faro,
+    module.alloy_faro,
+    kubernetes_namespace.qket,
+  ]
+}
+
+# alloy-faro(monitoring 네임스페이스)를 release/prod의 HTTPRoute가 cross-namespace로 참조할 수
+# 있게 하는 ReferenceGrant + TargetGroupConfiguration — release/prod가 같은 Service를 공유해서
+# env별 module.gateway_api_app/gateway_api_admin 인스턴스에 안 넣고 여기 한 번만 만든다
+# (modules/addons/gateway-api-faro/chart/Chart.yaml 참고). release가 이제 gateway_api_admin
+# 쪽으로 옮겨가도 namespace 목록(local.ingress_config 전체 키)은 그대로 release/prod 둘 다 필요.
+module "gateway_api_faro" {
+  source = "../modules/addons/gateway-api-faro"
+
+  allowed_namespaces = [for k in keys(local.ingress_config) : kubernetes_namespace.qket[k].metadata[0].name]
 
   depends_on = [module.alb_controller, module.gateway_api_crds, kubernetes_namespace.qket]
+}
+
+# 관리 도구(Grafana/ArgoCD) + dev(release) 공유 admin Gateway — admin-ingress.tf의
+# kubernetes_ingress_v1.grafana/argocd를 대체하고, dev.jun979.click도 여기로 옮겨서 팀원 IP
+# 허용목록(local.admin_allowed_cidrs, admin-ingress.tf)을 셋 다 공유하게 함. 인증서는
+# admin-ingress.tf가 이미 발급해둔 것(grafana/argocd)과 release용 기존 인증서(dev)를 그대로 재사용.
+# module.gateway_api_faro 이후에 있어야 함(dev의 /collect 라우팅이 그 ReferenceGrant를 씀).
+module "gateway_api_admin" {
+  source = "../modules/addons/gateway-api-admin"
+
+  admin_allowed_cidrs = local.admin_allowed_cidrs
+
+  grafana_certificate_arn = aws_acm_certificate_validation.grafana.certificate_arn
+  argocd_certificate_arn  = aws_acm_certificate_validation.argocd.certificate_arn
+
+  dev_hostname        = local.ingress_config.release.host
+  dev_certificate_arn = local.ingress_config.release.certificate_arn
+
+  depends_on = [
+    module.alb_controller,
+    module.gateway_api_crds,
+    module.gateway_api_faro,
+    module.alloy_faro,
+    module.monitoring,
+    helm_release.argocd,
+    kubernetes_namespace.qket,
+  ]
 }
 
 # Cluster Autoscaler — 2026-08-20 Karpenter 마이그레이션 3단계로 완전히 제거함(방식 A: 전면
@@ -162,8 +221,8 @@ module "karpenter" {
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
 
   # 기존 노드그룹과 동일한 서브넷/보안그룹 재사용 — Karpenter 전용 discovery 태그 추가 불필요
-  node_subnet_ids            = data.terraform_remote_state.infrastructure.outputs.private_general_subnet_ids
-  cluster_security_group_id  = data.terraform_remote_state.infrastructure.outputs.eks_cluster_security_group_id
+  node_subnet_ids           = data.terraform_remote_state.infrastructure.outputs.private_general_subnet_ids
+  cluster_security_group_id = data.terraform_remote_state.infrastructure.outputs.eks_cluster_security_group_id
 
   depends_on = [module.alb_controller]
 }
@@ -298,12 +357,12 @@ module "metrics_server" {
   depends_on = [module.alb_controller]
 }
 
-# 환경별 Ingress 설정 — 원래 CD/helm/templates/ingress.yaml(ArgoCD가 배포)이 갖고 있었는데,
-# Terraform(alb_controller가 있는 이 root)으로 옮김: destroy 시 "Ingress가 alb_controller보다
-# 먼저 없어져야 한다"는 순서를 같은 state 안에서 depends_on으로 직접 강제하기 위해서.
-# (namespace cascade-delete에 기대던 이전 방식 대신 — 2026-08-10, eks-destroy-layer-separation 참고)
-# host는 CD/helm/values.yaml에도 그대로 남아있음(backend의 APP_BASE_URL이 참조) — 두 군데 다
-# "이 환경의 프론트 도메인"이라는 같은 사실을 나타내는 것뿐이라 굳이 하나로 합칠 필요는 없음.
+# 환경별 도메인/인증서 설정 — 예전엔 이 값들로 kubernetes_ingress_v1(app_ingress_backend/
+# app_ingress_frontend/faro_ingress) 3개를 만들었는데, 2026-08-20 Gateway API로 완전히
+# 대체하면서 그 3개 리소스는 삭제함 — 지금은 module.gateway_api_app(위)이 이 값을 그대로 받아서
+# Gateway/HTTPRoute를 만듦. host는 CD/helm/values.yaml에도 그대로 남아있음(backend의
+# APP_BASE_URL이 참조) — 두 군데 다 "이 환경의 프론트 도메인"이라는 같은 사실을 나타내는 것뿐이라
+# 굳이 하나로 합칠 필요는 없음.
 locals {
   ingress_config = {
     release = {
@@ -315,169 +374,6 @@ locals {
       certificate_arn = "arn:aws:acm:ap-northeast-2:727646470302:certificate/a9789e71-7453-43d9-b0db-ad2ac973f4c0"
     }
   }
-}
-
-# 헬스체크를 위하여 두개로 나누기
-# 백엔드 k8s-ingress 
-resource "kubernetes_ingress_v1" "app_ingress_backend" {
-  for_each = local.ingress_config
-
-  metadata {
-    name      = "app-alb-ingress-backend"
-    namespace = kubernetes_namespace.qket[each.key].metadata[0].name
-
-    annotations = {
-      "alb.ingress.kubernetes.io/group.name"         = "qket"
-      "alb.ingress.kubernetes.io/group.order"        = "10"
-      "alb.ingress.kubernetes.io/tags"               = "Team=team5,Project=qket"
-      "alb.ingress.kubernetes.io/load-balancer-name" = "team5-qket-alb"
-      "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"        = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"    = each.value.certificate_arn
-      "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
-      "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
-      "alb.ingress.kubernetes.io/healthcheck-port"   = "8081"
-      "alb.ingress.kubernetes.io/healthcheck-path"   = "/actuator/health"
-    }
-  }
-
-  spec {
-    ingress_class_name = "alb"
-
-    rule {
-      host = each.value.host
-
-      http {
-        path {
-          path      = "/api"
-          path_type = "Prefix"
-
-          backend {
-            service {
-              name = "qket-backend-service"
-              port {
-                number = 80
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  wait_for_load_balancer = false
-
-  depends_on = [module.alb_controller]
-}
-
-#프론트앤드 k8s-ingress
-resource "kubernetes_ingress_v1" "app_ingress_frontend" {
-  for_each = local.ingress_config
-
-  metadata {
-    name      = "app-alb-ingress-frontend"
-    namespace = kubernetes_namespace.qket[each.key].metadata[0].name
-
-    annotations = {
-      "alb.ingress.kubernetes.io/group.name"         = "qket"
-      "alb.ingress.kubernetes.io/group.order"        = "20"
-      "alb.ingress.kubernetes.io/tags"               = "Team=team5,Project=qket"
-      "alb.ingress.kubernetes.io/load-balancer-name" = "team5-qket-alb"
-      "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"        = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"    = each.value.certificate_arn
-      "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
-      "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
-      "alb.ingress.kubernetes.io/healthcheck-path" = "/healthz"
-    }
-  }
-
-  spec {
-    ingress_class_name = "alb"
-
-    rule {
-      host = each.value.host
-
-      http {
-        path {
-          path      = "/"
-          path_type = "Prefix"
-
-          backend {
-            service {
-              name = "qket-frontend-service"
-              port {
-                number = 80
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  # false로 둠 — ALB가 실제로 잘 떴는지는 aws elbv2 describe-load-balancers로 필요할 때 확인.
-  wait_for_load_balancer = false
-
-  depends_on = [module.alb_controller]
-}
-
-# 브라우저(Faro SDK)가 dev.jun979.click/faro-collector, app.jun979.click/faro-collector로
-# 이벤트를 보내면 monitoring 네임스페이스의 alloy-faro 서비스로 라우팅 — 같은 ALB group("qket")에
-# 묶어서 백엔드/프론트엔드랑 로드밸런서 하나를 같이 씀(비용 절감, alb_controller 모듈 주석 참고 패턴과 동일).
-resource "kubernetes_ingress_v1" "faro_ingress" {
-  for_each = local.ingress_config
-
-  metadata {
-    # release/prod 둘 다 같은 네임스페이스(monitoring, alloy-faro가 있는 곳)를 쓰기 때문에
-    # backend/frontend Ingress처럼 네임스페이스로 구분이 안 됨 — 이름 자체에 환경을 붙여서 구분.
-    name      = "app-alb-ingress-faro-${each.key}"
-    namespace = "monitoring"
-
-    annotations = {
-      "alb.ingress.kubernetes.io/group.name"         = "qket"
-      "alb.ingress.kubernetes.io/group.order"        = "5"
-      "alb.ingress.kubernetes.io/tags"               = "Team=team5,Project=qket"
-      "alb.ingress.kubernetes.io/load-balancer-name" = "team5-qket-alb"
-      "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"        = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"    = each.value.certificate_arn
-      "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
-      "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
-    }
-  }
-
-  spec {
-    ingress_class_name = "alb"
-
-    rule {
-      host = each.value.host
-
-      http {
-        path {
-          # 2026-08-19: 원래 "/faro-collector"였는데, Grafana Alloy의 faro.receiver는
-          # 요청 경로를 정확히 "/collect"로만 받음(다른 경로는 전부 404). ALB는 nginx와
-          # 달리 경로 rewrite 기능이 없어서, 브라우저가 보내는 실제 경로를 "/collect"로
-          # 맞춰야 함(프론트 NEXT_PUBLIC_FARO_COLLECTOR_URL도 같이 맞춰야 함, CI-release.yml 참고).
-          path      = "/collect"
-          path_type = "Prefix"
-
-          backend {
-            service {
-              name = "alloy-faro"
-              port {
-                number = 12347
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  wait_for_load_balancer = false
-
-  depends_on = [module.alb_controller, module.alloy_faro]
 }
 
 # 개발용 자체호스팅 MySQL/Redis (RDS/ElastiCache와 별개, "앱 동작 확인용")

@@ -1,0 +1,22 @@
+# alloy-faro Service용 타겟그룹 설정. alloy-faro Service가 ClusterIP라 targetType을 기본값
+# (instance)으로 두면 ALB Controller가 "TargetGroup port is empty. When using Instance targets,
+# your service must be of type 'NodePort' or 'LoadBalancer'" 에러를 내며 Gateway 자체가
+# Accepted: False로 실패한다(2026-08-20 실제로 겪음 — 이 라우팅이 Ingress로도 한 번도 실제
+# 배포된 적이 없어서 그동안 발견 못 했던 잠재 버그였음). backend/frontend와 동일하게 ip로 명시.
+# release/prod 두 ALB가 각자 만드는 alloy-faro 타겟그룹 둘 다 이 설정 하나를 공유한다.
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: qket-gw-faro-tgc
+  namespace: {{ .Values.faro.namespace }}
+spec:
+  targetReference:
+    kind: Service
+    name: {{ .Values.faro.serviceName }}
+  defaultConfiguration:
+    targetType: ip
+    # 헬스체크 기본 경로("/")는 404, "/collect"는 GET에 405(POST 전용)라 둘 다 unhealthy로 오판됨
+    # (2026-08-20 실제로 겪음 — 포트포워딩으로 직접 확인). Grafana Alloy 자체 표준 준비 상태
+    # 엔드포인트(/-/ready)가 이 포트에서도 200을 줘서 이걸로 지정.
+    healthCheckConfig:
+      healthCheckPath: /-/ready

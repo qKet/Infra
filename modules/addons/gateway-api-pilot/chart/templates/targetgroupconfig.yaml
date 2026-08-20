@@ -2,6 +2,8 @@
 # 타겟그룹/헬스체크 설정 — 오늘 Ingress의 target-type/healthcheck-port/healthcheck-path annotation에 해당.
 # Service 단위로 붙기 때문에(targetReference), 오늘처럼 "healthcheck-path가 Ingress 단위로만 적용돼서
 # backend/frontend Ingress를 어쩔 수 없이 나눴다"는 제약이 여기선 애초에 생기지 않는다.
+# alloy-faro용 TargetGroupConfiguration은 여기 없음 — modules/addons/gateway-api-faro 참고
+# (release/prod가 같은 Service를 공유해서 env별로 중복 생성하면 오브젝트 소유권이 충돌함).
 apiVersion: gateway.k8s.aws/v1
 kind: TargetGroupConfiguration
 metadata:
