@@ -35,15 +35,14 @@ variable "azs" {
 variable "eks_version" {
   description = "EKS 클러스터 쿠버네티스 버전"
   type        = string
-  default     = "1.35" # 추후에 1.36으로 버전업 예정
+  default     = "1.36" # 추후에 1.36으로 버전업 예정
 }
 
 variable "node_instance_types" {
   description = "노드그룹 EC2 인스턴스 타입"
   type        = list(string)
 
-  default     = ["t3.xlarge"]
-
+  default     = ["t3.large"]
 }
 
 variable "node_desired_size" {
