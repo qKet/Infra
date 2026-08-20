@@ -42,7 +42,12 @@ variable "node_instance_types" {
   description = "노드그룹 EC2 인스턴스 타입"
   type        = list(string)
 
-  default     = ["t3.xlarge"]
+  # 2026-08-19 야간 멘토링: 포트폴리오/테스트 환경에서 t3.xlarge까지 잡을 필요 없음(용량 산정에
+  # 집착하지 말고, 평상시 기준을 낮게 잡고 오토스케일링으로 대응하는 게 핵심) — 처음엔 t3.medium까지
+  # 낮췄다가, 지금 떠 있는 애드온 스택(Loki/Promtail/Grafana/ArgoCD/KEDA/ALB Controller/EBS CSI 등)
+  # 규모에 t3.medium(2vCPU/4GB, 파드 한도 약 17개)은 부족해서 "Insufficient memory"/"Too many pods"로
+  # 스케줄링 실패가 계속 발생함(2026-08-19 실측). t3.large(2vCPU/8GB, 파드 한도 약 35개)로 절충.
+  default     = ["t3.large"]
 
 }
 

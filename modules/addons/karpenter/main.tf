@@ -1,0 +1,126 @@
+# Karpenter 마이그레이션 2단계 — 컨트롤러 Helm 설치 + EC2NodeClass/NodePool.
+# 1단계(iam.tf/sqs.tf)에서 만든 Controller Role/Node Role/Instance Profile/인터럽션 큐를 여기서 실제로 연결함.
+# 이 단계까지 적용돼도 cluster-autoscaler는 그대로 두고 노드그룹도 안 건드림 — Karpenter가
+# "쓸 수 있는" 상태만 만드는 것. 실제로 Karpenter가 노드를 만들기 시작하는 건 NodePool이
+# 생기고 스케줄링 안 되는 파드가 생겼을 때부터라, 지금 당장 노드가 추가로 뜨진 않음.
+# cluster-autoscaler 제거/노드그룹 축소는 4단계에서 별도로 진행.
+
+resource "helm_release" "karpenter" {
+  name             = "karpenter"
+  repository       = "oci://public.ecr.aws/karpenter"
+  chart            = "karpenter"
+  version          = var.karpenter_chart_version
+  namespace        = "kube-system"
+  create_namespace = false
+
+  set {
+    name  = "settings.clusterName"
+    value = var.cluster_name
+  }
+
+  set {
+    name  = "settings.interruptionQueue"
+    value = aws_sqs_queue.karpenter_interruption.name
+  }
+
+  set {
+    name  = "serviceAccount.name"
+    value = "karpenter"
+  }
+
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = aws_iam_role.karpenter_controller.arn
+  }
+
+  # cluster-autoscaler와 동일 계열 addon이라 동일 톨러레이션/우선순위 정책 적용 안 함 —
+  # 차트 기본값(system-cluster-critical)을 그대로 씀.
+
+  depends_on = [
+    aws_iam_role_policy.karpenter_controller,
+    aws_eks_access_entry.karpenter_node,
+    aws_sqs_queue_policy.karpenter_interruption,
+  ]
+}
+
+# ── EC2NodeClass — Karpenter가 새로 띄우는 EC2의 AMI/네트워크/역할 정의 ──
+# 서브넷/보안그룹은 태그 기반 discovery 대신 기존 노드그룹과 동일한 리소스를 ID로 직접 지정
+# (00_network/modules/eks에 karpenter.sh/discovery 태그를 새로 추가할 필요 없이 재사용).
+resource "kubectl_manifest" "karpenter_node_class" {
+  yaml_body = yamlencode({
+    apiVersion = "karpenter.k8s.aws/v1"
+    kind       = "EC2NodeClass"
+    metadata = {
+      name = "${var.project_name}-default"
+    }
+    spec = {
+      role = aws_iam_role.karpenter_node.name
+
+      amiSelectorTerms = [
+        { alias = "al2023@latest" }
+      ]
+
+      subnetSelectorTerms = [
+        for id in var.node_subnet_ids : { id = id }
+      ]
+
+      securityGroupSelectorTerms = [
+        { id = var.cluster_security_group_id }
+      ]
+    }
+  })
+
+  depends_on = [helm_release.karpenter]
+}
+
+# ── NodePool — 인스턴스 타입/용량 종류/스케일다운 정책 정의 ──
+# 2026-08-20 결정: 인스턴스 타입은 t3.medium~xlarge로 넓게(워크로드 크기에 맞춰 최적화),
+# 용량은 온디맨드만(Redis 세션 등 상태 있는 서비스가 있어 스팟 회수 리스크 배제), 스케일다운은
+# WhenEmptyOrUnderutilized(비용 최적화 효과를 정량적으로 보여주기 위함 — 야간 멘토링 조언).
+resource "kubectl_manifest" "karpenter_node_pool" {
+  yaml_body = yamlencode({
+    apiVersion = "karpenter.sh/v1"
+    kind       = "NodePool"
+    metadata = {
+      name = "${var.project_name}-default"
+    }
+    spec = {
+      template = {
+        spec = {
+          nodeClassRef = {
+            group = "karpenter.k8s.aws"
+            kind  = "EC2NodeClass"
+            name  = "${var.project_name}-default"
+          }
+
+          requirements = [
+            {
+              key      = "node.kubernetes.io/instance-type"
+              operator = "In"
+              values   = var.node_instance_types
+            },
+            {
+              key      = "karpenter.sh/capacity-type"
+              operator = "In"
+              values   = var.capacity_types
+            },
+            {
+              key      = "kubernetes.io/arch"
+              operator = "In"
+              values   = ["amd64"]
+            },
+          ]
+        }
+      }
+
+      disruption = {
+        consolidationPolicy = var.consolidation_policy
+        # underutilized 판단 후 실제로 통합을 실행하기까지 기다리는 시간 — 너무 짧으면 트래픽이
+        # 잠깐 튈 때도 자꾸 재배치가 일어나서 1분으로 여유를 둠.
+        consolidateAfter = "1m"
+      }
+    }
+  })
+
+  depends_on = [kubectl_manifest.karpenter_node_class]
+}

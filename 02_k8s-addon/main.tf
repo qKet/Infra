@@ -133,6 +133,26 @@ module "cluster_autoscaler" {
   depends_on = [module.alb_controller]
 }
 
+# Karpenter 마이그레이션 1단계 — IAM/SQS만 먼저 준비(Controller Role, Node Role/Instance
+# Profile, 인터럽션 큐). 아직 Helm 설치/EC2NodeClass/NodePool은 없어서 실제로 노드를 만들진
+# 않음 — cluster_autoscaler는 계속 그대로 동작 중. 2단계에서 Helm 설치를 추가할 예정.
+module "karpenter" {
+  source = "../modules/addons/karpenter"
+
+  project_name = var.project_name
+  aws_region   = var.aws_region
+  cluster_name = data.terraform_remote_state.infrastructure.outputs.eks_cluster_name
+
+  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
+  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  # 기존 노드그룹과 동일한 서브넷/보안그룹 재사용 — Karpenter 전용 discovery 태그 추가 불필요
+  node_subnet_ids            = data.terraform_remote_state.infrastructure.outputs.private_general_subnet_ids
+  cluster_security_group_id  = data.terraform_remote_state.infrastructure.outputs.eks_cluster_security_group_id
+
+  depends_on = [module.alb_controller]
+}
+
 # ExternalDNS — ALB Controller가 만든 ALB의 주소를 Route53에 자동으로 연결
 #
 # depends_on = [module.alb_controller] — helm_release.argocd와 같은 이유(위 주석 참고): 이 차트도
