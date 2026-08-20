@@ -457,3 +457,15 @@ resource "kubernetes_ingress_v1" "faro_ingress" {
 
   depends_on = [module.alb_controller, module.alloy_faro]
 }
+
+# 개발용 자체호스팅 MySQL/Redis (RDS/ElastiCache와 별개, "앱 동작 확인용")
+# 2026-08-20: 팀 요청 — 운영(release)은 지금 그대로 RDS/ElastiCache 유지, 개발 확인용으로
+# EBS 기반 StatefulSet을 추가로 띄움. 자세한 트레이드오프(매일 밤 destroy 시 데이터도 같이
+# 사라짐)는 modules/addons/dev-datastore/main.tf 상단 주석 참고.
+module "dev_datastore" {
+  source = "../modules/addons/dev-datastore"
+
+  namespace = "qket-release"
+
+  depends_on = [kubernetes_namespace.qket]
+}
