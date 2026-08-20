@@ -35,7 +35,7 @@ variable "azs" {
 variable "eks_version" {
   description = "EKS 클러스터 쿠버네티스 버전"
   type        = string
-  default     = "1.35" # 추후에 1.36으로 버전업 예정
+  default     = "1.36" # 추후에 1.36으로 버전업 예정
 }
 
 variable "node_instance_types" {
@@ -48,7 +48,6 @@ variable "node_instance_types" {
   # 규모에 t3.medium(2vCPU/4GB, 파드 한도 약 17개)은 부족해서 "Insufficient memory"/"Too many pods"로
   # 스케줄링 실패가 계속 발생함(2026-08-19 실측). t3.large(2vCPU/8GB, 파드 한도 약 35개)로 절충.
   default     = ["t3.large"]
-
 }
 
 variable "node_desired_size" {

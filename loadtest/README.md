@@ -75,6 +75,60 @@ ulimit -n 65536
 ⚠️ **macOS에서 VU 수천 개가 순간적으로 몰리면 k6 프로세스 자체가 죽을 수 있음**(`runtime: program exceeds 10000-thread limit`류 크래시, 2026-08-18 10000 VU 테스트에서 실제로 겪음) — macOS는 TLS 인증서 검증을 시스템(Security.framework) 블로킹 syscall로 처리해서, VU 수천 개가 거의 동시에 HTTPS 커넥션을 열면 그만큼 OS 스레드가 한꺼번에 블로킹되고 Go 런타임 스레드 상한(1만 개)을 넘겨버림 — **서버(EKS) 문제가 아니라 로컬 테스트 클라이언트 한계**. 두 스크립트 다 `options.insecureSkipTLSVerify: true`로 이 경로를 회피해뒀음. 그래도 계속 죽으면 같은 리전 EC2(Linux — 이 syscall 문제 자체가 없음)에서 돌리는 걸 추천.
 
 ⚠️ **VU 1만 개가 진짜로 같은 순간에 커넥션을 열면 ALB 자체가 TLS 핸드셰이크 단계에서 리셋시킴** — macOS 크래시를 피해서 Linux(EC2)에서 돌려도 이 문제는 남음. 2026-08-18 실측: CloudWatch `ClientTLSNegotiationErrorCount`가 분당 6~8천 건까지 튀었는데 `RejectedConnectionCount`/`TargetConnectionErrorCount`는 0 — backend/frontend가 아니라 **ALB 자체의 순간 용량(LCU) 한계**였음(ALB는 트래픽 추세를 보고 점진적으로 용량을 늘리는 구조라 대비 없는 순간 폭증은 AWS 인프라 레벨에서도 못 받아냄, AWS도 대규모 스파이크 예정 시 사전 pre-warming을 권장함). 두 스크립트 다 이제 각 VU가 요청 시작 전 `0~RAMP_SECONDS`초(기본 10초) 사이에서 무작위로 대기해서 커넥션 개설을 자연스럽게 분산시킴 — "만 명이 각자 한 번씩"이라는 본질은 그대로 유지. 그래도 TLS negotiation 에러가 보이면 `-e RAMP_SECONDS=30`처럼 더 넓게 잡아서 재시도.
+## `e2e_reservation_2000.js` 시나리오 (엔드투엔드 + Redis 부하테스트)
+
+로그인 → 목록조회 → 대기열 진입 → 좌석선택 → 예매까지, 실제 예매 여정 전체를 2000명이 동시에 수행.
+로그인(Redis 세션), 대기열(Redis), 좌석 락(Redis 분산락) 세 군데를 전부 실제로 거침.
+
+**결제 단계는 제외됨** — `POST /payments/confirm`이 실제 토스페이먼츠 API를 호출해서 검증하기 때문에
+자동화된 부하테스트로는 완주 불가. 대신 `POST /reservations`(결제 없이 직접 예매)를 쓰는데, 이게
+내부적으로 결제 흐름과 완전히 동일한 Redis 락 로직을 타서 락 검증 목적으로는 충분함.
+
+**사전 조건**:
+1. `seed_test_accounts.sql`로 `loadtest0001`~`loadtest2000` 계정을 대상 DB에 미리 생성해둘 것
+2. `ROUND_ID`(스크립트 상단)를 AVAILABLE 좌석이 넉넉한 실제 회차 ID로 맞춰둘 것 — 아래처럼 직접 조회해서 확인:
+   ```sql
+   SELECT round_id, COUNT(*) FROM RESERVATIONS WHERE reserved_status='AVAILABLE' GROUP BY round_id ORDER BY 2 DESC;
+   ```
+
+```bash
+k6 run e2e_reservation_2000.js
+```
+
+**대기열 특성상 오래 걸림**: `QueueServiceImpl`의 `MAX_ACTIVE_USERS=10`이라 한 번에 10명만 활성화되고
+나머지는 대기함. 2000명이 전부 순서를 받으려면 시간이 꽤 걸리므로 `maxDuration: 40m`로 넉넉히 잡아둠 —
+빨리 끝나지 않는다고 이상한 게 아님.
+
+**테스트 후 반드시 확인**:
+- k6 리포트의 `reservation_unexpected_fail` 카운터가 0인지 (500 등 진짜 서버 에러 여부)
+- DB에서 이중예매 여부 직접 확인:
+  ```sql
+  SELECT seat_id, COUNT(*) FROM RESERVATIONS
+  WHERE round_id=18 AND reserved_status='RESERVED' GROUP BY seat_id HAVING COUNT(*) > 1;
+  ```
+  (결과가 하나라도 있으면 Redis 락이 뚫린 것 — 심각한 버그)
+- 테스트 끝나고 좌석 원복하려면: `UPDATE RESERVATIONS SET user_id=NULL, reserved_status='AVAILABLE', reserved_at=NULL WHERE round_id=18 AND user_id LIKE 'loadtest%';`
+
+## `sustained_1000_login.js` 시나리오 (장시간 부하테스트)
+
+`spike_1000_login.js`는 90초짜리 즉시 스파이크라 아래 세 가지는 확인이 안 됨:
+- RDS(`db.t3.*`)는 버스터블 인스턴스라 CPU 크레딧이 바닥나야 성능이 급락하는데, 크레딧 소진에는 몇 분 이상 지속 부하가 필요함
+- cluster-autoscaler가 노드를 실제로 추가하는 데 수 분이 걸림 — 짧은 테스트는 그 전에 끝나버림
+- KEDA/HPA가 replica를 늘렸다 줄였다 진동하지 않고 안정적인 값으로 수렴하는지도 몇 분은 지켜봐야 보임
+
+그래서 총 25분 구성으로 만듦: 3분 램프업(0→1000, 커넥션 스톰 방지) → **20분 유지(1000 VU)** → 2분 램프다운.
+
+```bash
+k6 run sustained_1000_login.js
+```
+
+### 테스트 도중 반드시 같이 관찰할 것
+
+1. **RDS CPU 크레딧 잔량**: CloudWatch → RDS → 해당 인스턴스 → `CPUCreditBalance` 지표. 테스트 시작 시점 대비 20분 유지 구간 동안 계속 떨어지기만 하면 소진 위험 신호. `CPUUtilization`도 같이 보면 크레딧 소진 시점부터 처리량이 꺾이는 게 보임.
+2. **노드 개수 변화**: `kubectl get nodes -w` 로 cluster-autoscaler가 실제로 노드를 늘리는지, 몇 분 만에 늘리는지 관찰.
+3. **HPA 수렴 여부**: `kubectl get hpa -w` — replica 수가 어느 값에서 안정되는지, 아니면 계속 오르내리는지(진동) 확인.
+4. **Grafana `qket` 대시보드** — CPU 스로틀링(pod별), 노드 CPU 사용률, HikariCP 커넥션 수 패널을 20분 내내 관찰. ([[backend-cpu-throttling-and-scaling-load-test]], [[hikaricp-connection-storm-load-test]] 참고)
+5. **램프다운 이후 회복**: 부하가 0으로 내려간 뒤 HikariCP 커넥션/노드 개수가 원래 수준으로 돌아오는지(과도한 노드가 남아있지 않은지, cluster-autoscaler의 scale-down도 정상 동작하는지).
 
 ## 테스트 중 모니터링
 
