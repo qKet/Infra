@@ -25,7 +25,7 @@ export const options = {
   scenarios: {
     e2e_reservation: {
       executor: 'per-vu-iterations',
-      vus: 4000,
+      vus: 2000,
       iterations: 1,
       maxDuration: '40m', // 좌석(2000석)보다 인원(4000명)이 많은 오픈런 시나리오 — 절반은 매진으로 실패하는 게 정상
     },

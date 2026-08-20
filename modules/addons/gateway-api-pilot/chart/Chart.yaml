@@ -1,0 +1,11 @@
+apiVersion: v2
+name: gateway-api-pilot
+description: >
+  Gateway API 마이그레이션 1단계 파일럿 — release 환경에 테스트 호스트네임(gw-dev.jun979.click)으로
+  Gateway/HTTPRoute/LoadBalancerConfiguration/TargetGroupConfiguration을 띄워서 실제 ALB 생성부터
+  라우팅까지 실 트래픽 영향 없이 검증한다. modules/addons/gateway-api-crds(CRD + GatewayClass)와
+  module.alb_controller가 먼저 있어야 하므로 이 모듈은 그 둘에 depends_on을 건다.
+
+  crds/ 폴더가 없는 순수 templates/ 차트 — CRD는 전부 다른 두 곳(gateway-api-crds 모듈,
+  aws-load-balancer-controller 차트 자신)이 제공한다.
+version: 0.1.0

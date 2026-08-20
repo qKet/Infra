@@ -95,12 +95,27 @@ resource "helm_release" "argocd" {
 
 
 
+# Gateway API core CRD + GatewayClass — Ingress의 후속 표준으로 전환하는 작업의 1단계
+# (release 환경 파일럿, 실 트래픽 영향 없음). module.alb_controller보다 반드시 "먼저" 있어야
+# 함(반대 방향 depends_on 없음, 대신 알b_controller 쪽에서 이 모듈을 기다림) — AWS Load Balancer
+# Controller가 부팅 시점에 딱 한 번 이 CRD 존재 여부로 자기 ALBGatewayAPI 기능을 켤지 정하기
+# 때문. 이유/실제 겪은 증상은 modules/addons/gateway-api-crds/main.tf 주석과 CLAUDE_LLM_WIKI
+# decisions/2026-08-2X-ingress-to-gateway-api-migration 참고.
+module "gateway_api_crds" {
+  source = "../modules/addons/gateway-api-crds"
+}
+
 # AWS Load Balancer Controller — Ingress 오브젝트를 보고 실제 ALB를 만들어주는 컨트롤러.
 # 이게 없으면 Ingress를 아무리 apply해도 AWS에 ALB 자체가 안 생김(K8s 오브젝트만 있고 실체가 없음).
 # 2026-08-10: backup/modules/alb-controller에서 여기로 이전 — Ingress Controller가 만드는
 # ALB/타겟그룹/전용SG는 Terraform이 모르는 리소스라, destroy할 땐 반드시 helm uninstall(이 root의
 # destroy)이 EKS가 살아있는 동안 먼저 끝나야 함. 그래서 01_infrastructure가 아니라 여기(Layer 2,
 # k8s-addon)에 둠 — 자세한 이유는 CLAUDE_LLM_WIKI의 eks-destroy-layer-separation 문서 참고.
+#
+# depends_on = [module.gateway_api_crds] — 2026-08-20 추가: Gateway API CRD가 이 컨트롤러의
+# 부팅 시점에 이미 있어야 ALBGatewayAPI 기능이 켜진다(없으면 "Disabling ALBGatewayAPI: missing
+# required CRDs" 로그를 남기고 그 파드가 살아있는 동안 계속 비활성 — kubectl rollout restart로
+# 재부팅해야만 정상화됨, 실제로 겪음). 순서를 여기서 강제해두면 매일 아침 이 수동 재시작이 필요 없음.
 module "alb_controller" {
   source = "../modules/addons/alb-controller"
 
@@ -112,6 +127,20 @@ module "alb_controller" {
 
   oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  depends_on = [module.gateway_api_crds]
+}
+
+# Gateway API 1단계 파일럿 오브젝트(Gateway/HTTPRoute/LoadBalancerConfiguration/
+# TargetGroupConfiguration) — module.gateway_api_crds와 반대로, 이 모듈은 module.alb_controller
+# "다음"에 있어야 한다(그 컨트롤러 자신의 Helm 차트가 LoadBalancerConfiguration/
+# TargetGroupConfiguration CRD를 제공하기 때문 — modules/addons/gateway-api-pilot/main.tf 주석
+# 참고). kubernetes_namespace.qket["release"]에 리소스를 만들므로 그것도 depends_on에 포함.
+# 기존 app_ingress_backend/app_ingress_frontend(dev.jun979.click 실트래픽)는 이 모듈과 전혀 무관.
+module "gateway_api_pilot" {
+  source = "../modules/addons/gateway-api-pilot"
+
+  depends_on = [module.alb_controller, module.gateway_api_crds, kubernetes_namespace.qket]
 }
 
 # Cluster Autoscaler — 2026-08-20 Karpenter 마이그레이션 3단계로 완전히 제거함(방식 A: 전면
@@ -156,7 +185,9 @@ module "external_dns" {
   hosted_zone_id = "Z0111999JD2RHOSHTM8A" # jun979.click
   domain_filter  = "jun979.click"
 
-  depends_on = [module.alb_controller]
+  # module.gateway_api_crds가 먼저 있어야 함 — sources에 gateway-httproute를 켜놨는데
+  # (modules/addons/external-dns/main.tf 참고) 그 CRD가 없으면 external-dns 파드가 크래시루프 남.
+  depends_on = [module.alb_controller, module.gateway_api_crds]
 }
 
 # 모니터링 스택(Prometheus/Grafana/Alertmanager) — wiki decisions/2026-08-11-monitoring-stack-design 참고.
@@ -235,32 +266,17 @@ resource "kubernetes_config_map" "grafana_dashboards" {
 
 # backend API 지표(응답시간, 요청수, HikariCP, JVM 등)를 Prometheus가 스크랩하게 등록.
 # wiki decisions/2026-08-11-monitoring-stack-design 문서상 "2차(나중)" 범위였던 앱 레벨 지표 —
-# release 환경만 우선 커버. backend Service(qket-backend-service)에 포트 이름이 없어서
-# port(이름) 대신 targetPort(번호)로 참조함 — Service에 `name: http`를 붙이면 더 표준적인
-# port 참조로 바꿀 수 있음.
+# release 환경만 우선 커버.
 #
-# targetPort=8081, path=/actuator/prometheus (앱 메인 포트 8080/context-path `/api`와 다름) —
-# actuator가 보안상 별도 관리 포트(8081)로 분리되어 있고, management 포트는 server.servlet.context-path를
-# 상속하지 않아 `/api` 접두어가 안 붙음. 예전엔 8080 + `/api/actuator/prometheus`로 잘못 설정돼 있었는데,
-# 그때는 우연히 앱과 actuator가 같은 포트를 썼어서 동작하다가 actuator가 8081로 분리되면서 조용히 깨짐
-# (Prometheus up=0, 404) — 부하테스트 도중 발견.
-resource "kubernetes_manifest" "backend_service_monitor" {
-  manifest = {
-    apiVersion = "monitoring.coreos.com/v1"
-    kind       = "ServiceMonitor"
-    metadata = {
-      name      = "qket-backend"
-      namespace = "monitoring"
-      labels    = { release = "monitoring" }
-    }
-    spec = {
-      namespaceSelector = { matchNames = ["qket-release"] }
-      selector          = { matchLabels = { app = "qket-backend" } }
-      endpoints = [
-        { targetPort = 8081, path = "/actuator/prometheus", interval = "15s" }
-      ]
-    }
-  }
+# 2026-08-20: kubernetes_manifest에서 helm_release 기반 모듈로 전환 — kubernetes_manifest는
+# plan 시점에 ServiceMonitor CRD가 클러스터에 이미 있는지 확인하는데, 02_k8s-addon이 매일 밤
+# destroy→재생성되는 구조상 이게 매번 실패했음(3일 연속 재현, CLAUDE_LLM_WIKI
+# troubleshooting/crd-not-yet-installed-on-fresh-apply). helm_release는 이 문제 자체가 없어서
+# 매일 아침 `-target=module.monitoring` 선적용 없이도 그냥 apply 한 번으로 끝남. 실제
+# ServiceMonitor 내용/포트 관련 주석은 modules/addons/backend-servicemonitor/chart/templates/
+# servicemonitor.yaml 참고.
+module "backend_servicemonitor" {
+  source = "../modules/addons/backend-servicemonitor"
 
   depends_on = [module.monitoring]
 }
@@ -462,4 +478,22 @@ resource "kubernetes_ingress_v1" "faro_ingress" {
   wait_for_load_balancer = false
 
   depends_on = [module.alb_controller, module.alloy_faro]
+}
+
+# 개발용 자체호스팅 MySQL/Redis (RDS/ElastiCache와 별개, "앱 동작 확인용")
+# 2026-08-20: 팀 요청 — 운영(release)은 지금 그대로 RDS/ElastiCache 유지, 개발 확인용으로
+# EBS 기반 StatefulSet을 추가로 띄움. 처음엔 동적 프로비저닝(매번 새 볼륨)으로 만들었다가,
+# 이러면 클러스터 재생성마다 예전 볼륨이 고아로 남아 비용만 새고 데이터도 결국 안 이어진다는
+# 걸 확인해서, 03_registry가 만든 영구 EBS 볼륨을 정적으로 재연결하는 방식으로 변경함.
+# 자세한 이유는 modules/addons/dev-datastore/main.tf 상단 주석 참고.
+module "dev_datastore" {
+  source = "../modules/addons/dev-datastore"
+
+  namespace = "qket-release"
+
+  mysql_ebs_volume_id = data.terraform_remote_state.registry.outputs.dev_mysql_ebs_volume_id
+  redis_ebs_volume_id = data.terraform_remote_state.registry.outputs.dev_redis_ebs_volume_id
+  availability_zone   = data.terraform_remote_state.registry.outputs.dev_datastore_availability_zone
+
+  depends_on = [kubernetes_namespace.qket]
 }
