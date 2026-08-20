@@ -42,3 +42,18 @@ output "argocd_notifications_secret_arn" {
   description = "ArgoCD 알림 Gmail 자격증명 Secrets Manager ARN — 02_k8s-addon이 remote_state로 읽어서 ESO(ExternalSecret)에 씀"
   value       = aws_secretsmanager_secret.argocd_notifications.arn
 }
+
+output "dev_mysql_ebs_volume_id" {
+  description = "개발용 MySQL EBS 볼륨 ID — 02_k8s-addon이 static PV로 재연결할 때 씀"
+  value       = aws_ebs_volume.dev_mysql.id
+}
+
+output "dev_redis_ebs_volume_id" {
+  description = "개발용 Redis EBS 볼륨 ID — 02_k8s-addon이 static PV로 재연결할 때 씀"
+  value       = aws_ebs_volume.dev_redis.id
+}
+
+output "dev_datastore_availability_zone" {
+  description = "개발용 MySQL/Redis EBS 볼륨이 있는 AZ — 이 AZ의 노드에서만 파드가 뜰 수 있음"
+  value       = aws_ebs_volume.dev_mysql.availability_zone
+}

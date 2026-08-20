@@ -460,12 +460,18 @@ resource "kubernetes_ingress_v1" "faro_ingress" {
 
 # 개발용 자체호스팅 MySQL/Redis (RDS/ElastiCache와 별개, "앱 동작 확인용")
 # 2026-08-20: 팀 요청 — 운영(release)은 지금 그대로 RDS/ElastiCache 유지, 개발 확인용으로
-# EBS 기반 StatefulSet을 추가로 띄움. 자세한 트레이드오프(매일 밤 destroy 시 데이터도 같이
-# 사라짐)는 modules/addons/dev-datastore/main.tf 상단 주석 참고.
+# EBS 기반 StatefulSet을 추가로 띄움. 처음엔 동적 프로비저닝(매번 새 볼륨)으로 만들었다가,
+# 이러면 클러스터 재생성마다 예전 볼륨이 고아로 남아 비용만 새고 데이터도 결국 안 이어진다는
+# 걸 확인해서, 03_registry가 만든 영구 EBS 볼륨을 정적으로 재연결하는 방식으로 변경함.
+# 자세한 이유는 modules/addons/dev-datastore/main.tf 상단 주석 참고.
 module "dev_datastore" {
   source = "../modules/addons/dev-datastore"
 
   namespace = "qket-release"
+
+  mysql_ebs_volume_id = data.terraform_remote_state.registry.outputs.dev_mysql_ebs_volume_id
+  redis_ebs_volume_id = data.terraform_remote_state.registry.outputs.dev_redis_ebs_volume_id
+  availability_zone   = data.terraform_remote_state.registry.outputs.dev_datastore_availability_zone
 
   depends_on = [kubernetes_namespace.qket]
 }

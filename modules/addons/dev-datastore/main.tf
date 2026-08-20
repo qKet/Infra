@@ -5,12 +5,15 @@
 # 볼륨 재연결이 보장되지 않음 — StatefulSet은 파드 이름(mysql-0 등)과 그 파드 전용 PVC를
 # 고정으로 짝지어줘서, 재시작해도 항상 자기 데이터로 다시 붙는 걸 보장함.
 #
-# ⚠️ 이 모듈이 02_k8s-addon에 있는 한, 매일 밤 destroy될 때 이 StatefulSet도 같이 사라짐.
-# StorageClass "gp2"의 reclaimPolicy가 기본값 Delete라 EBS 볼륨도 같이 삭제되고, 다음날
-# 재생성되면 빈 DB로 새로 시작함 — "개발 중 잠깐 켜놓고 보는 용도"에는 문제없지만, 데이터를
-# 계속 유지하고 싶다면 이 모듈을 03_registry(영구 레이어)로 옮기거나 StorageClass를
-# reclaimPolicy=Retain으로 바꿔야 함 (그 경우 사람이 다음날 PV를 수동으로 재연결해야 함 —
-# AMP를 03_registry로 옮겼던 것과 같은 트레이드오프).
+# ⚠️ 볼륨은 "동적 프로비저닝"이 아니라 "정적 프로비저닝"을 씀 — StorageClass로 매번 새
+# EBS 볼륨을 만드는 대신, 03_registry가 미리 만들어둔 영구 볼륨(aws_ebs_volume.dev_mysql/
+# dev_redis)을 PersistentVolume이 volume_handle로 직접 가리킴. 이유: 이 02_k8s-addon 자체는
+# 매일 밤 destroy되는데(EKS 클러스터가 통째로 사라짐), StatefulSet/PVC 같은 쿠버네티스
+# 오브젝트는 그게 어디 정의돼있든 클러스터가 없으면 존재할 수 없음 — 그래서 클러스터와
+# 무관하게 영구히 살아있는 "EBS 볼륨 자체"만 03_registry(순수 AWS 리소스 레이어)에 두고,
+# 매일 새로 뜨는 StatefulSet이 "같은" 볼륨을 다시 붙여서 데이터가 실제로 유지되게 함.
+# (처음엔 StorageClass 동적 프로비저닝을 썼다가, 이러면 매일 새 빈 볼륨만 계속 쌓이고
+# 예전 볼륨은 고아로 남아 비용만 샌다는 걸 확인하고 이 방식으로 변경함.)
 
 resource "random_password" "mysql_root" {
   length  = 20
@@ -24,6 +27,55 @@ resource "kubernetes_secret" "mysql" {
   }
   data = {
     MYSQL_ROOT_PASSWORD = random_password.mysql_root.result
+  }
+}
+
+# --- MySQL ---
+
+resource "kubernetes_persistent_volume" "mysql" {
+  metadata {
+    name = "dev-mysql-pv"
+  }
+  spec {
+    capacity                        = { storage = var.mysql_storage_size }
+    access_modes                    = ["ReadWriteOnce"]
+    persistent_volume_reclaim_policy = "Retain" # 안전장치 — PVC가 실수로 지워져도 볼륨(데이터)은 안 날아가게
+    storage_class_name              = ""        # 빈 문자열 = 정적 프로비저닝(동적 StorageClass 매칭 안 함)
+
+    persistent_volume_source {
+      csi {
+        driver        = "ebs.csi.aws.com"
+        volume_handle = var.mysql_ebs_volume_id
+        fs_type       = "ext4"
+      }
+    }
+
+    node_affinity {
+      required {
+        node_selector_term {
+          match_expressions {
+            key      = "topology.kubernetes.io/zone"
+            operator = "In"
+            values   = [var.availability_zone]
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_persistent_volume_claim" "mysql" {
+  metadata {
+    name      = "dev-mysql-data"
+    namespace = var.namespace
+  }
+  spec {
+    access_modes       = ["ReadWriteOnce"]
+    storage_class_name = ""
+    volume_name        = kubernetes_persistent_volume.mysql.metadata[0].name
+    resources {
+      requests = { storage = var.mysql_storage_size }
+    }
   }
 }
 
@@ -94,19 +146,62 @@ resource "kubernetes_stateful_set_v1" "mysql" {
             limits   = { cpu = "1", memory = "1Gi" }
           }
         }
-      }
-    }
-    volume_claim_template {
-      metadata {
-        name = "data"
-      }
-      spec {
-        access_modes       = ["ReadWriteOnce"]
-        storage_class_name = "gp2"
-        resources {
-          requests = { storage = var.mysql_storage_size }
+        volume {
+          name = "data"
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.mysql.metadata[0].name
+          }
         }
       }
+    }
+  }
+}
+
+# --- Redis ---
+
+resource "kubernetes_persistent_volume" "redis" {
+  metadata {
+    name = "dev-redis-pv"
+  }
+  spec {
+    capacity                        = { storage = var.redis_storage_size }
+    access_modes                    = ["ReadWriteOnce"]
+    persistent_volume_reclaim_policy = "Retain"
+    storage_class_name              = ""
+
+    persistent_volume_source {
+      csi {
+        driver        = "ebs.csi.aws.com"
+        volume_handle = var.redis_ebs_volume_id
+        fs_type       = "ext4"
+      }
+    }
+
+    node_affinity {
+      required {
+        node_selector_term {
+          match_expressions {
+            key      = "topology.kubernetes.io/zone"
+            operator = "In"
+            values   = [var.availability_zone]
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_persistent_volume_claim" "redis" {
+  metadata {
+    name      = "dev-redis-data"
+    namespace = var.namespace
+  }
+  spec {
+    access_modes       = ["ReadWriteOnce"]
+    storage_class_name = ""
+    volume_name        = kubernetes_persistent_volume.redis.metadata[0].name
+    resources {
+      requests = { storage = var.redis_storage_size }
     }
   }
 }
@@ -159,17 +254,11 @@ resource "kubernetes_stateful_set_v1" "redis" {
             limits   = { cpu = "500m", memory = "512Mi" }
           }
         }
-      }
-    }
-    volume_claim_template {
-      metadata {
-        name = "data"
-      }
-      spec {
-        access_modes       = ["ReadWriteOnce"]
-        storage_class_name = "gp2"
-        resources {
-          requests = { storage = var.redis_storage_size }
+        volume {
+          name = "data"
+          persistent_volume_claim {
+            claim_name = kubernetes_persistent_volume_claim.redis.metadata[0].name
+          }
         }
       }
     }
