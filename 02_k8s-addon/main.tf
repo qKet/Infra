@@ -42,6 +42,7 @@ resource "kubernetes_namespace" "qket" {
 module "argocd" {
   source = "../modules/addons/argocd"
 
+  project_name                    = var.project_name
   aws_region                      = var.aws_region
   argocd_notifications_secret_arn = data.terraform_remote_state.registry.outputs.argocd_notifications_secret_arn
 
@@ -127,7 +128,10 @@ module "gateway_api_faro" {
 
   allowed_namespaces = [for k in keys(local.ingress_config) : kubernetes_namespace.qket[k].metadata[0].name]
 
-  depends_on = [module.alb_controller, module.gateway_api_crds, kubernetes_namespace.qket]
+  # module.monitoring — 이 모듈의 차트가 ReferenceGrant를 "monitoring" 네임스페이스(alloy-faro
+  # Service가 있는 곳)에 만드는데, 그 네임스페이스 자체를 module.monitoring이 만들어서 먼저
+  # 끝나야 함(2026-08-21 실제로 "namespaces monitoring not found"로 겪음).
+  depends_on = [module.alb_controller, module.gateway_api_crds, module.monitoring, kubernetes_namespace.qket]
 }
 
 # 관리 도구(Grafana/ArgoCD) + dev(release) 공유 admin Gateway — admin-ingress.tf의
@@ -362,14 +366,7 @@ locals {
   }
 }
 
-# 개발용 자체호스팅 MySQL/Redis — release 환경의 RDS/ElastiCache를 완전히 대체.
-# 2026-08-21: 비용/관리 부담 때문에 release는 RDS/ElastiCache를 만들지 않기로 하고(04_data의
-# use_managed_datastore=false), 이 StatefulSet 파드가 release 백엔드가 실제로 붙는 DB/Redis가 됨.
-# prod는 계속 진짜 RDS/ElastiCache를 씀 — module.dev_datastore 자체가 qket-release 전용이라
-# prod에는 애초에 안 생김. 처음엔 EBS를 동적 프로비저닝(매번 새 볼륨)으로 만들었다가, 이러면
-# 클러스터 재생성마다 예전 볼륨이 고아로 남아 비용만 새고 데이터도 결국 안 이어진다는 걸 확인해서,
-# 03_registry가 만든 영구 EBS 볼륨을 정적으로 재연결하는 방식으로 변경함.
-# 자세한 이유는 modules/addons/dev-datastore/main.tf 상단 주석 참고.
+# 개발용 스테이트풀셋 MySQL/Redis — release 환경의 RDS/ElastiCache를 완전히 대체. (비용/관리 부담 때문)
 data "aws_secretsmanager_secret_version" "dev_mysql_root" {
   secret_id = data.terraform_remote_state.registry.outputs.dev_mysql_root_secret_arn
 }
@@ -383,7 +380,7 @@ module "dev_datastore" {
   redis_ebs_volume_id = data.terraform_remote_state.registry.outputs.dev_redis_ebs_volume_id
   availability_zone   = data.terraform_remote_state.registry.outputs.dev_datastore_availability_zone
 
-  # 03_registry가 영구 보존하는 값 — 여기서 매번 새로 안 만듦(드리프트 방지, dev-datastore/variables.tf 참고)
+  # 03_registry가 영구 보존
   mysql_root_password = jsondecode(data.aws_secretsmanager_secret_version.dev_mysql_root.secret_string).password
 
   depends_on = [kubernetes_namespace.qket]

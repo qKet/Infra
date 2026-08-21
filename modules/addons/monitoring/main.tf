@@ -194,3 +194,29 @@ resource "kubernetes_config_map" "grafana_dashboards" {
 
   depends_on = [helm_release.monitoring]
 }
+
+# Grafana 관리자 비밀번호를 Secrets Manager로 미러링 — 비밀번호 자체는 그대로 차트가 매번
+# 새로 자동 생성하게 두고(고정 비밀번호는 보안상 원하지 않음), 그 값을 조회하기 쉽게 AWS
+# Secrets Manager에도 똑같이 넣어둠. kubectl로 K8s Secret을 직접 까보는 대신 콘솔/CLI로
+# 바로 조회 가능 — 매일 밤 재생성되니 이 시크릿 값도 매번 최신값으로 덮어써짐(ignore_changes 없음).
+data "kubernetes_secret" "grafana_admin" {
+  metadata {
+    name      = "monitoring-grafana"
+    namespace = "monitoring"
+  }
+
+  depends_on = [helm_release.monitoring]
+}
+
+resource "aws_secretsmanager_secret" "grafana_admin" {
+  name                    = "${var.project_name}-grafana-admin"
+  recovery_window_in_days = 0 # 매일 재생성되는 값 — 대기기간 있으면 이름 충돌 남
+}
+
+resource "aws_secretsmanager_secret_version" "grafana_admin" {
+  secret_id = aws_secretsmanager_secret.grafana_admin.id
+  secret_string = jsonencode({
+    username = data.kubernetes_secret.grafana_admin.data["admin-user"]
+    password = data.kubernetes_secret.grafana_admin.data["admin-password"]
+  })
+}
