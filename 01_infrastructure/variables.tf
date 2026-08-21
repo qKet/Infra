@@ -19,10 +19,6 @@ variable "aws_region" {
 /*******************
 *     NetWork
 *******************/
-# vpc_cidr/public_subnet_cidrs/private_subnet_cidrs는 2026-08-13에 00_network로 옮겨감(vpc/subnet
-# 모듈이 실제로 쓰는 값들이라 여기 남길 이유가 없음). azs는 NAT Gateway/라우팅 테이블 count에
-# 여전히 쓰여서 남겨둠 — 00_network/variables.tf에도 같은 값(default)이 중복으로 있음, 서로 다른
-# root라 변수 공유가 안 되니 두 곳 다 값을 바꿔야 함(가용영역을 실제로 바꿀 일은 거의 없음).
 variable "azs" {
   description = "가용영역 목록"
   type        = list(string)
@@ -35,14 +31,37 @@ variable "azs" {
 variable "eks_version" {
   description = "EKS 클러스터 쿠버네티스 버전"
   type        = string
-  default     = "1.36" # 추후에 1.36으로 버전업 예정
+  default     = "1.36"
 }
 
 
-# node_instance_types/node_desired_size/node_min_size/node_max_size는 2026-08-20 Karpenter
-# 마이그레이션 3-4(정리)로 제거함 — 관리형 노드그룹(3-3에서 제거) 전용 변수였음. 인스턴스
-# 타입/스케일 범위는 이제 02_k8s-addon/modules/addons/karpenter/variables.tf의
-# node_instance_types(NodePool 후보군)가 대신함.
+# 2026-08-21 재도입 — Karpenter/CoreDNS 등이 뜰 최초의 노드가 없으면 데드락에 빠지는 걸
+# 실제로 겪어서, 부트스트랩용 노드 1개(고정)를 다시 둠(modules/eks/eks.tf 상단 주석 참고).
+# desired/min/max를 전부 1로 고정 — 오토스케일링은 이제 karpenter(NodePool)가 전담이라
+# 이 노드그룹은 순수 부트스트랩 floor 역할만 함.
+variable "node_instance_types" {
+  description = "부트스트랩 노드그룹 EC2 인스턴스 타입 — kube-system 파드(CoreDNS/Karpenter/ALB Controller/ArgoCD/ExternalDNS/EBS CSI 등)가 동시에 뜰 수 있어야 함(t3.medium은 부족했던 걸 실측함)"
+  type        = list(string)
+  default     = ["t3.large"]
+}
+
+variable "node_desired_size" {
+  description = "부트스트랩 노드 수"
+  type        = number
+  default     = 1
+}
+
+variable "node_min_size" {
+  description = "부트스트랩 노드 최소"
+  type        = number
+  default     = 1
+}
+
+variable "node_max_size" {
+  description = "부트스트랩 노드 최대 "
+  type        = number
+  default     = 1
+}
 
 /*******************
 *     Bastion (SSM)

@@ -15,18 +15,13 @@
 # (처음엔 StorageClass 동적 프로비저닝을 썼다가, 이러면 매일 새 빈 볼륨만 계속 쌓이고
 # 예전 볼륨은 고아로 남아 비용만 샌다는 걸 확인하고 이 방식으로 변경함.)
 
-resource "random_password" "mysql_root" {
-  length  = 20
-  special = false
-}
-
 resource "kubernetes_secret" "mysql" {
   metadata {
     name      = "dev-mysql-secret"
     namespace = var.namespace
   }
   data = {
-    MYSQL_ROOT_PASSWORD = random_password.mysql_root.result
+    MYSQL_ROOT_PASSWORD = var.mysql_root_password
   }
 }
 
@@ -37,10 +32,10 @@ resource "kubernetes_persistent_volume" "mysql" {
     name = "dev-mysql-pv"
   }
   spec {
-    capacity                        = { storage = var.mysql_storage_size }
-    access_modes                    = ["ReadWriteOnce"]
+    capacity                         = { storage = var.mysql_storage_size }
+    access_modes                     = ["ReadWriteOnce"]
     persistent_volume_reclaim_policy = "Retain" # 안전장치 — PVC가 실수로 지워져도 볼륨(데이터)은 안 날아가게
-    storage_class_name              = ""        # 빈 문자열 = 정적 프로비저닝(동적 StorageClass 매칭 안 함)
+    storage_class_name               = ""       # 빈 문자열 = 정적 프로비저닝(동적 StorageClass 매칭 안 함)
 
     persistent_volume_source {
       csi {
@@ -164,10 +159,10 @@ resource "kubernetes_persistent_volume" "redis" {
     name = "dev-redis-pv"
   }
   spec {
-    capacity                        = { storage = var.redis_storage_size }
-    access_modes                    = ["ReadWriteOnce"]
+    capacity                         = { storage = var.redis_storage_size }
+    access_modes                     = ["ReadWriteOnce"]
     persistent_volume_reclaim_policy = "Retain"
-    storage_class_name              = ""
+    storage_class_name               = ""
 
     persistent_volume_source {
       csi {

@@ -45,15 +45,40 @@ output "argocd_notifications_secret_arn" {
 
 output "dev_mysql_ebs_volume_id" {
   description = "개발용 MySQL EBS 볼륨 ID — 02_k8s-addon이 static PV로 재연결할 때 씀"
-  value       = aws_ebs_volume.dev_mysql.id
+  value       = module.dev_mysql_volume.id
 }
 
 output "dev_redis_ebs_volume_id" {
   description = "개발용 Redis EBS 볼륨 ID — 02_k8s-addon이 static PV로 재연결할 때 씀"
-  value       = aws_ebs_volume.dev_redis.id
+  value       = module.dev_redis_volume.id
 }
 
 output "dev_datastore_availability_zone" {
   description = "개발용 MySQL/Redis EBS 볼륨이 있는 AZ — 이 AZ의 노드에서만 파드가 뜰 수 있음"
-  value       = aws_ebs_volume.dev_mysql.availability_zone
+  value       = module.dev_mysql_volume.availability_zone
+}
+
+output "dev_mysql_root_secret_arn" {
+  description = "개발용 MySQL 루트 비밀번호 Secrets Manager ARN(username/password 키, RDS 마스터 시크릿과 같은 모양) — 02_k8s-addon의 dev-datastore와 04_data의 module.eso(release)가 remote_state로 읽어서 씀"
+  value       = aws_secretsmanager_secret.dev_mysql_root.arn
+}
+
+output "grafana_certificate_arn" {
+  description = "grafana.jun979.click 인증서 ARN — 02_k8s-addon이 remote_state로 읽어서 module.gateway_api_admin에 씀"
+  value       = module.grafana_cert.certificate_arn
+}
+
+output "argocd_certificate_arn" {
+  description = "cd.jun979.click 인증서 ARN — 02_k8s-addon이 remote_state로 읽어서 module.gateway_api_admin에 씀"
+  value       = module.argocd_cert.certificate_arn
+}
+
+output "dev_certificate_arn" {
+  description = "dev.jun979.click 인증서 ARN — 02_k8s-addon이 remote_state로 읽어서 local.ingress_config.release에 씀"
+  value       = module.dev_cert.certificate_arn
+}
+
+output "app_certificate_arn" {
+  description = "app.jun979.click 인증서 ARN — 02_k8s-addon이 remote_state로 읽어서 local.ingress_config.prod에 씀"
+  value       = module.app_cert.certificate_arn
 }

@@ -45,7 +45,101 @@ module "github_actions_oidc" {
   }
 }
 
-# SES 도메인 인증(jun979.click)은 ses.tf(이메일인증/예매확정·취소 알림용으로 먼저 만들어짐)가 관리 —
-# 예매 오픈 알림도 같은 도메인을 쓰지만, SES 도메인 인증은 계정당 하나뿐이라 별도 모듈로 안 두고
-# modules/lambda가 ses.tf 결과를 계정/리전/도메인명으로 직접 계산해서 참조함(중복 관리 방지).
-# 자세한 이유는 modules/lambda/main.tf의 동일 패턴 주석 참고.
+/*
+  [ACM 인증서]
+  설명    : 각 도메인의 HTTPS 접속을 위한 ACM 인증서 생성
+*/
+module "grafana_cert" {
+  source = "../modules/acm"
+
+  domain_name = "grafana.jun979.click"
+  zone_id     = "Z0111999JD2RHOSHTM8A" # jun979.click
+}
+
+module "argocd_cert" {
+  source = "../modules/acm"
+
+  domain_name = "cd.jun979.click"
+  zone_id     = "Z0111999JD2RHOSHTM8A" # jun979.click
+}
+
+module "dev_cert" {
+  source = "../modules/acm"
+
+  domain_name = "dev.jun979.click"
+  zone_id     = "Z0111999JD2RHOSHTM8A" # jun979.click
+}
+
+module "app_cert" {
+  source = "../modules/acm"
+
+  domain_name = "app.jun979.click"
+  zone_id     = "Z0111999JD2RHOSHTM8A" # jun979.click
+}
+
+/*
+  [EBS 볼륨]
+  설명    : dev,redis 영구 데이터 보존용 볼륨 생성
+*/
+module "dev_mysql_volume" {
+  source = "../modules/ebs_volume"
+
+  availability_zone = "ap-northeast-2a"
+  size              = 10
+  name_tag          = "${var.project_name}-dev-mysql-data"
+}
+
+module "dev_redis_volume" {
+  source = "../modules/ebs_volume"
+
+  availability_zone = "ap-northeast-2a"
+  size              = 2
+  name_tag          = "${var.project_name}-dev-redis-data"
+}
+
+# 개발용 MySQL 루트 비밀번호 — 02_k8s-addon(매일 밤 재생성)이 아니라 여기서 딱 한 번만 생성해
+# 영구 보존. MySQL 컨테이너는 데이터 디렉터리가 이미 있으면(둘째 날부터) MYSQL_ROOT_PASSWORD를
+# 다시 안 읽어서, 매번 새로 생성하면 Terraform이 아는 값과 실제 비밀번호가 어긋나는 드리프트가 생김.
+# secret_string을 RDS 마스터 계정 시크릿과 같은 모양(username/password)으로 맞춰서, 04_data의
+# module.eso가 RDS든 이거든 그대로 재사용할 수 있게 함.
+resource "random_password" "dev_mysql_root" {
+  length  = 20
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "dev_mysql_root" {
+  name = "${var.project_name}-dev-mysql-root"
+}
+
+resource "aws_secretsmanager_secret_version" "dev_mysql_root" {
+  secret_id = aws_secretsmanager_secret.dev_mysql_root.id
+  secret_string = jsonencode({
+    username = "root"
+    password = random_password.dev_mysql_root.result
+  })
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+# ArgoCD 알림(이메일) 발신 계정 자격증명 — 02_k8s-addon은 매일 밤 destroy되는 root라 여기
+# (03_registry, 절대 안 지워짐)에 Secrets Manager로 저장해두고, 02_k8s-addon에서는
+# ESO(ExternalSecret)로 이 값을 읽어와 Kubernetes Secret으로 동기화한다.
+# 사람이 직접 발급받은 값이라 external_api_keys와 같은 이유로 lifecycle.ignore_changes로
+# 보호 — 재적용 시 값이 빈 문자열로 덮어써지는 사고 방지.
+resource "aws_secretsmanager_secret" "argocd_notifications" {
+  name = "${var.project_name}-argocd-notifications"
+}
+
+resource "aws_secretsmanager_secret_version" "argocd_notifications" {
+  secret_id = aws_secretsmanager_secret.argocd_notifications.id
+  secret_string = jsonencode({
+    email-username = var.notification_gmail_username
+    email-password = var.notification_gmail_app_password
+  })
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}

@@ -7,8 +7,11 @@ Qket 인프라의 Terraform 코드. root(디렉토리)는 apply 순서를 그대
 01_infrastructure/   EKS, bastion, NAT Gateway — 비용이 나가는 것만 남음, 순수 AWS API 리소스
 02_k8s-addon/         namespace, ArgoCD — kubernetes/helm provider로 EKS 위에 배포
 03_registry/          ECR, github-actions-oidc — 공유·불변, env 안 나뉨, 절대 안 지움
-04_data/               RDS, Redis, S3(포스터) — release/prod workspace로 분리, 절대 안 지움
+04_data/release/       RDS/ElastiCache 대신 dev-datastore(StatefulSet) 연동, S3(포스터) 등 — release 전용 root
+04_data/prod/           RDS, Redis, S3(포스터) 등 — prod 전용 root
 ```
+
+> `04_data`는 2026-08-21에 단일 root(release/prod를 terraform workspace로 분리)에서 `04_data/release`·`04_data/prod` 두 개의 독립된 root로 나뉨 — release가 RDS/ElastiCache 대신 `02_k8s-addon`의 dev-datastore(StatefulSet MySQL/Redis)를 쓰게 되면서 release/prod 구조 자체가 달라져(모듈 유무 자체가 다름), workspace + count/삼항식으로 억지로 합쳐두는 것보다 디렉토리를 나누는 게 더 읽기 쉽다고 판단함. 둘 다 안 지우는 건 그대로.
 
 > `00_network`는 2026-08-13에 `01_infrastructure`에서 분리됨 — VPC/서브넷/보안그룹은 AWS 요금이 안 붙는 무료 리소스라 매일 밤 destroy할 이유가 없었고, 오히려 밤 시간대에 값이 없어서 `-refresh-only`가 깨지는 원인만 됐음. 이제 `01_infrastructure`는 `-target` 없이 통째로 destroy해도 안전함.
 
@@ -31,13 +34,11 @@ cd 02_k8s-addon && terraform apply
 cd 03_registry && terraform init
 cd 03_registry && terraform apply
 
-cd 04_data && terraform init
-cd 04_data && terraform workspace new release   # 최초 1회
-cd 04_data && terraform workspace new prod      # 최초 1회
-cd 04_data && terraform workspace select release
-cd 04_data && terraform apply
-cd 04_data && terraform workspace select prod
-cd 04_data && terraform apply
+cd 04_data/release && terraform init
+cd 04_data/release && terraform apply
+
+cd 04_data/prod && terraform init
+cd 04_data/prod && terraform apply
 ```
 
 자세한 이유/주의사항은 CLAUDE_LLM_WIKI의 `runbook/terraform-apply-order.md` 참고.
@@ -80,8 +81,8 @@ cd 02_k8s-addon && terraform apply
 
 # 3. data도 다시 apply — RDS/Redis는 안 건드리고, 네임스페이스가 새로 생기면서
 #    같이 사라졌던 ServiceAccount(qket-backend, IRSA)/ConfigMap만 다시 채워짐
-cd 04_data && terraform workspace select release && terraform apply
-cd 04_data && terraform workspace select prod && terraform apply
+cd 04_data/release && terraform apply
+cd 04_data/prod && terraform apply
 ```
 
 ## 참고
