@@ -18,35 +18,46 @@ variable "namespace" {
   type        = string
 }
 
-variable "oidc_provider_arn" {
-  description = "IRSA용 OIDC 프로바이더 ARN (module.eks 출력값)"
+variable "eso_role_name" {
+  description = "02_k8s-addon의 module.eso_controller가 만든 공유 ESO IRSA 역할 이름 — 이 모듈은 이 역할을 직접 만들지 않고, 자기 시크릿 ARN만큼 정책을 추가로 붙이기만 함(iam.tf 참고)."
   type        = string
 }
 
-variable "oidc_provider_url" {
-  description = "IRSA용 OIDC 프로바이더 URL (module.eks 출력값)"
-  type        = string
+variable "manage_db_redis_secrets" {
+  description = "db-secrets/redis-secrets를 이 모듈(ESO)로 관리할지 여부. false면 connection 시크릿과 external_secret_db/redis를 아예 안 만듦 — DB_HOST/REDIS_HOST가 하드코딩 가능한 고정값이고 비밀번호도 절대 안 바뀌는 환경(release의 dev-datastore)은 ESO의 로테이션 동기화가 필요 없어서 끔. 그런 환경은 호출부에서 db-secrets를 plain kubernetes_secret으로 직접 만듦."
+  type        = bool
+  default     = true
 }
 
+# 아래 세 개는 manage_db_redis_secrets=true일 때만 실제로 쓰임 — false면 안 넘겨도 되게 기본값을 둠.
 variable "rds_master_user_secret_arn" {
   description = "RDS가 자동 생성한 마스터 계정 Secrets Manager ARN (건드리지 않고 읽기만 함)"
   type        = string
+  default     = ""
 }
 
 variable "rds_endpoint" {
   description = "RDS 엔드포인트 — connection 시크릿의 DB_HOST 값으로 씀"
   type        = string
+  default     = ""
 }
 
 variable "redis_endpoint" {
   description = "ElastiCache Redis 엔드포인트 — connection 시크릿의 REDIS_HOST 값으로 씀"
   type        = string
+  default     = ""
 }
 
 variable "secret_recovery_window_days" {
   description = "connection 시크릿 삭제 시 대기기간(일) — release는 0(바로 삭제, 재생성 충돌 방지), prod는 7 이상 권장(실수 삭제 대비)"
   type        = number
   default     = 0
+}
+
+variable "extra_secret_arns" {
+  description = "db/redis/external_api 외에 이 ESO Role이 추가로 읽어야 하는 Secrets Manager ARN 목록 (예: 다른 root에서 만든 시크릿을 재사용할 때)"
+  type        = list(string)
+  default     = []
 }
 
 # 토스/OAuth 등 외부 API 키 — RDS/Redis 엔드포인트처럼 Terraform이 자동 계산하는 값이 아니라
@@ -66,6 +77,7 @@ variable "external_api_keys" {
     kakao_client_secret  = string
     naver_client_id      = string
     naver_client_secret  = string
+    openai_api_key = string
   })
   sensitive = true
   default = {
@@ -77,5 +89,6 @@ variable "external_api_keys" {
     kakao_client_secret  = ""
     naver_client_id      = ""
     naver_client_secret  = ""
+    openai_api_key = ""
   }
 }

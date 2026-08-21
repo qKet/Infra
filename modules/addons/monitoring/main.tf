@@ -68,6 +68,17 @@ resource "helm_release" "monitoring" {
   # — Grafana의 범용 SigV4 서명 미들웨어가 AMP(aps) 서비스명을 못 알아봄. 대신 AWS가 공식으로
   # 만든 AMP 전용 플러그인(grafana-amazonprometheus-datasource)으로 교체 — 이건 서비스명을
   # 하드코딩해서 알고 있어서 이 문제 자체가 없음.
+  #
+  # 그런데 교체 후에도 queryData 호출이 "Missing Authentication Token"으로 계속 실패하던 버그가
+  # 있었음(위키 troubleshooting/grafana-amp-datasource-missing-auth-token 참고) — 서버 레벨
+  # sigv4_auth_enabled만 켜고 데이터소스 jsonData에 sigV4Auth를 명시적으로 안 켜서 실제 서명이
+  # 안 붙었던 게 원인으로 추정됨. GitHub grafana-amazonprometheus-datasource#640 코멘트에서
+  # 같은 증상을 겪은 사람이 이 조합(서버 설정 + jsonData.sigV4Auth)으로 해결했다고 확인해줌.
+  set {
+    name  = "grafana.grafana\\.ini.auth.sigv4_auth_enabled"
+    value = "true"
+  }
+
   set {
     name  = "grafana.plugins[0]"
     value = "grafana-amazonprometheus-datasource"
@@ -103,6 +114,17 @@ resource "helm_release" "monitoring" {
     value = var.aws_region
   }
 
+  # GitHub #640 워크어라운드의 핵심 필드 — 이게 빠져있어서 지금까지 서명이 안 붙었던 것으로 추정.
+  set {
+    name  = "grafana.additionalDataSources[0].jsonData.sigV4Auth"
+    value = "true"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[0].jsonData.sigV4Region"
+    value = var.aws_region
+  }
+
   # RDS/Redis 지표는 백엔드가 직접 노출 안 해서(HikariCP는 예외) CloudWatch 데이터소스로 봄.
   # IAM은 iam.tf의 grafana_cloudwatch_read 정책으로 이미 준비돼있음(IRSA, 이 Grafana ServiceAccount 전용).
   set {
@@ -124,4 +146,77 @@ resource "helm_release" "monitoring" {
     name  = "grafana.additionalDataSources[1].jsonData.defaultRegion"
     value = var.aws_region
   }
+
+  # Loki(로그 저장소, modules/addons/loki) — 클러스터 내부 서비스라 IAM/인증 불필요,
+  # CloudWatch/AMP처럼 access 정보 없이 그냥 내부 주소로 연결.
+  set {
+    name  = "grafana.additionalDataSources[2].name"
+    value = "Loki"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[2].type"
+    value = "loki"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[2].url"
+    value = "http://loki.monitoring.svc.cluster.local:3100"
+  }
+
+  set {
+    name  = "grafana.additionalDataSources[2].access"
+    value = "proxy"
+  }
+}
+
+# Grafana 대시보드 정의를 git에 저장 — EKS를 destroy/재생성해도 이 모듈만 다시 apply하면
+# 대시보드가 자동으로 돌아옴(위 helm_release의 sidecar.dashboards 설정이 이 ConfigMap을
+# grafana_dashboard=1 라벨로 찾아서 자동 로드). JSON은 Grafana UI의 dashboard
+# settings > JSON Model에서 export한 것을 그대로 커밋해두면 됨.
+resource "kubernetes_config_map" "grafana_dashboards" {
+  metadata {
+    name      = "qket-grafana-dashboards"
+    namespace = "monitoring"
+    labels = {
+      grafana_dashboard = "1"
+    }
+  }
+
+  data = {
+    "qket-monitoring.json" = file("${path.module}/dashboards/qket-monitoring.json")
+    # 2026-08-19: 백엔드/프론트(SSR)/브라우저(Faro) 로그를 매번 쿼리 바꿔가며 Explore에서
+    # 찾아보는 대신, 패널 3개로 한 화면에 고정해둔 대시보드. 3번째 패널(브라우저 이벤트)의
+    # 쿼리는 Alloy faro.receiver가 실제로 붙이는 라벨을 아직 확정 못 해서 임시로 텍스트
+    # 필터(|= "qket-frontend")만 걸어둠 — Grafana에서 실제 라벨 확인되면 라벨 매처로 교체 필요.
+    "qket-logs.json" = file("${path.module}/dashboards/qket-logs.json")
+  }
+
+  depends_on = [helm_release.monitoring]
+}
+
+# Grafana 관리자 비밀번호를 Secrets Manager로 미러링 — 비밀번호 자체는 그대로 차트가 매번
+# 새로 자동 생성하게 두고(고정 비밀번호는 보안상 원하지 않음), 그 값을 조회하기 쉽게 AWS
+# Secrets Manager에도 똑같이 넣어둠. kubectl로 K8s Secret을 직접 까보는 대신 콘솔/CLI로
+# 바로 조회 가능 — 매일 밤 재생성되니 이 시크릿 값도 매번 최신값으로 덮어써짐(ignore_changes 없음).
+data "kubernetes_secret" "grafana_admin" {
+  metadata {
+    name      = "monitoring-grafana"
+    namespace = "monitoring"
+  }
+
+  depends_on = [helm_release.monitoring]
+}
+
+resource "aws_secretsmanager_secret" "grafana_admin" {
+  name                    = "${var.project_name}-grafana-admin"
+  recovery_window_in_days = 0 # 매일 재생성되는 값 — 대기기간 있으면 이름 충돌 남
+}
+
+resource "aws_secretsmanager_secret_version" "grafana_admin" {
+  secret_id = aws_secretsmanager_secret.grafana_admin.id
+  secret_string = jsonencode({
+    username = data.kubernetes_secret.grafana_admin.data["admin-user"]
+    password = data.kubernetes_secret.grafana_admin.data["admin-password"]
+  })
 }

@@ -1,0 +1,13 @@
+apiVersion: v2
+name: argocd-notifications-secrets
+description: >
+  ArgoCD 알림용 Gmail 자격증명을 ESO(External Secrets Operator)로 동기화하는 SecretStore/
+  ExternalSecret을 helm_release로 설치하는 로컬 차트. CRD(external-secrets.io)는 여기서
+  vendoring하지 않는다 — 같은 root(02_k8s-addon)의 module.eso_controller가 이미 제공한다.
+
+  2026-08-21: ESO 컨트롤러가 04_data(다른 root)에서 여기와 같은 root로 옮겨오면서, 예전에
+  있던 cross-root plan-time 확인 문제(CLAUDE_LLM_WIKI
+  troubleshooting/crd-not-yet-installed-on-fresh-apply)가 해소됨 — module.argocd가
+  depends_on=[module.eso_controller]로 같은 root 안에서 순서를 보장받음. helm_release로
+  바꿔둔 건 유지 — kubectl_manifest보다 실패 범위가 좁다는 장점은 여전히 유효함.
+version: 0.1.0

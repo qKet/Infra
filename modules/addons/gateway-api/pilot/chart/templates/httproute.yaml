@@ -1,0 +1,76 @@
+{{- if .Values.pilot.enabled }}
+# 라우팅 규칙 — 오늘 app_ingress_backend/app_ingress_frontend/faro_ingress 세 개의 Ingress가
+# 하던 일을 규칙 3개로 합쳤다. healthcheck-path가 Ingress 오브젝트 단위로만 적용돼서 어쩔 수 없이
+# Ingress를 셋으로 쪼갰던 제약이, TargetGroupConfiguration이 서비스 단위이기 때문에 Gateway
+# API에서는 아예 사라진다. 경로 우선순위(오늘 group.order로 수동 지정하던 것)도 Gateway API는
+# "더 구체적인 경로가 자동으로 우선"이라 별도 설정이 필요 없다(/collect, /api가 캐치올 / 보다
+# 항상 먼저 매치됨).
+#
+# https 리스너(sectionName: https)에만 붙는다 — 실제 서비스 트래픽은 여기서만 처리.
+# certificateArn이 없으면(TLS 미설정) https 리스너 자체가 없으므로 http에 붙인다 — 1단계
+# 파일럿(테스트 호스트네임, TLS 없음) 하위호환용.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qket-gw-pilot-route
+  namespace: {{ .Values.pilot.namespace }}
+spec:
+  parentRefs:
+    - name: qket-gw-pilot
+      sectionName: {{ if .Values.pilot.certificateArn }}https{{ else }}http{{ end }}
+  hostnames:
+    - {{ .Values.pilot.hostname }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: {{ .Values.pilot.backend.serviceName }}
+          port: {{ .Values.pilot.backend.servicePort }}
+    # Grafana Alloy Faro 수집 엔드포인트 — alloy-faro는 다른 namespace({{ .Values.pilot.faro.namespace }})에
+    # 있어서 cross-namespace backendRef가 필요 — modules/addons/gateway-api-faro가 만드는
+    # ReferenceGrant 참고(release/prod 둘 다 허용하도록 거기서 한 번에 관리).
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /collect
+      backendRefs:
+        - name: {{ .Values.pilot.faro.serviceName }}
+          namespace: {{ .Values.pilot.faro.namespace }}
+          port: {{ .Values.pilot.faro.servicePort }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ .Values.pilot.frontend.serviceName }}
+          port: {{ .Values.pilot.frontend.servicePort }}
+---
+{{- if .Values.pilot.certificateArn }}
+# http 리스너(sectionName: http) 전용 — 트래픽을 실제로 처리하지 않고 https로 리다이렉트만 함
+# (오늘 Ingress의 ssl-redirect=443과 동일한 효과). RequestRedirect는 Gateway API 표준 필터
+# (Support: Core)라 벤더 중립적으로 지원됨.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qket-gw-pilot-https-redirect
+  namespace: {{ .Values.pilot.namespace }}
+spec:
+  parentRefs:
+    - name: qket-gw-pilot
+      sectionName: http
+  hostnames:
+    - {{ .Values.pilot.hostname }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+{{- end }}
+{{- end }}

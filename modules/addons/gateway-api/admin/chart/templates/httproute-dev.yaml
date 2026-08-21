@@ -1,0 +1,44 @@
+{{- if .Values.admin.dev.certificateArn }}
+# dev.jun979.click(release) 라우팅 규칙 — gateway-api-app 모듈이 release용으로 만들던 것과
+# 내용은 동일(오늘 이 모듈로 옮겨오면서 release는 gateway-api-app의 for_each에서 빠짐).
+# "개발 서버는 관리자만 들어가야 한다"는 결정(2026-08-20)에 따라 공개 ALB 대신 이 admin
+# Gateway(팀원 IP 허용목록 적용)로 옮김.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: qket-gw-admin-dev-route
+  namespace: {{ .Values.admin.dev.namespace }}
+spec:
+  parentRefs:
+    - name: qket-gw-admin
+      namespace: {{ .Values.admin.namespace }}
+      sectionName: dev-https
+  hostnames:
+    - {{ .Values.admin.dev.hostname }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: {{ .Values.admin.dev.backend.serviceName }}
+          port: {{ .Values.admin.dev.backend.servicePort }}
+    # Grafana Alloy Faro 수집 엔드포인트 — alloy-faro는 다른 namespace에 있어서 cross-namespace
+    # backendRef가 필요 — modules/addons/gateway-api-faro가 만드는 ReferenceGrant가 이미
+    # qket-release를 허용해뒀음(release/prod 둘 다 허용하도록 거기서 한 번에 관리).
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /collect
+      backendRefs:
+        - name: {{ .Values.admin.dev.faro.serviceName }}
+          namespace: {{ .Values.admin.dev.faro.namespace }}
+          port: {{ .Values.admin.dev.faro.servicePort }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ .Values.admin.dev.frontend.serviceName }}
+          port: {{ .Values.admin.dev.frontend.servicePort }}
+{{- end }}

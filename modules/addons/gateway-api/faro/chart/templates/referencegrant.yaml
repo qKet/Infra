@@ -1,0 +1,21 @@
+# HTTPRoute(qket-release/qket-prod 네임스페이스, modules/addons/gateway-api-pilot이 만듦)가
+# 다른 네임스페이스({{ .Values.faro.namespace }})의 alloy-faro Service를 backendRef로 참조하려면,
+# Gateway API 보안 모델상 "참조당하는 쪽" 네임스페이스에 이걸 명시적으로 허용하는 ReferenceGrant가
+# 있어야 한다(기본은 cross-namespace 참조 전부 거부 — 임의의 네임스페이스가 남의 Service를
+# 마음대로 못 가리키게).
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: qket-gw-allow-faro
+  namespace: {{ .Values.faro.namespace }}
+spec:
+  from:
+    {{- range .Values.faro.allowedNamespaces }}
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ . }}
+    {{- end }}
+  to:
+    - group: ""
+      kind: Service
+      name: {{ .Values.faro.serviceName }}

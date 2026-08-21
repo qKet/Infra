@@ -19,28 +19,10 @@ variable "aws_region" {
 /*******************
 *     NetWork
 *******************/
-variable "vpc_cidr" {
-  description = "VPC CIDR 대역"
-  type        = string
-  default     = "10.70.0.0/16"
-}
-
 variable "azs" {
   description = "가용영역 목록"
   type        = list(string)
   default     = ["ap-northeast-2a", "ap-northeast-2b"]
-}
-
-variable "public_subnet_cidrs" {
-  description = "퍼블릭 서브넷 CIDR 목록 — AZ당 1개, azs와 순서 1:1 대응"
-  type        = list(string)
-  default     = ["10.70.1.0/24", "10.70.4.0/24"]
-}
-
-variable "private_subnet_cidrs" {
-  description = "프라이빗 서브넷 CIDR 목록 — AZ당 2개씩, azs 순서대로 [a-1, a-2, b-1, b-2] 배치"
-  type        = list(string)
-  default     = ["10.70.2.0/24", "10.70.3.0/24", "10.70.5.0/24", "10.70.6.0/24"]
 }
 
 /*******************
@@ -49,31 +31,36 @@ variable "private_subnet_cidrs" {
 variable "eks_version" {
   description = "EKS 클러스터 쿠버네티스 버전"
   type        = string
-  default     = "1.35" # 추후에 1.36으로 버전업 예정
+  default     = "1.36"
 }
 
+
+# 2026-08-21 재도입 — Karpenter/CoreDNS 등이 뜰 최초의 노드가 없으면 데드락에 빠지는 걸
+# 실제로 겪어서, 부트스트랩용 노드 1개(고정)를 다시 둠(modules/eks/eks.tf 상단 주석 참고).
+# desired/min/max를 전부 1로 고정 — 오토스케일링은 이제 karpenter(NodePool)가 전담이라
+# 이 노드그룹은 순수 부트스트랩 floor 역할만 함.
 variable "node_instance_types" {
-  description = "노드그룹 EC2 인스턴스 타입"
+  description = "부트스트랩 노드그룹 EC2 인스턴스 타입 — kube-system 파드(CoreDNS/Karpenter/ALB Controller/ArgoCD/ExternalDNS/EBS CSI 등)가 동시에 뜰 수 있어야 함(t3.medium은 부족했던 걸 실측함)"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3.large"]
 }
 
 variable "node_desired_size" {
-  description = "노드그룹 기본 노드 수"
+  description = "부트스트랩 노드 수"
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "node_min_size" {
-  description = "노드그룹 최소 노드 수"
+  description = "부트스트랩 노드 최소"
   type        = number
   default     = 1
 }
 
 variable "node_max_size" {
-  description = "노드그룹 최대 노드 수"
+  description = "부트스트랩 노드 최대 "
   type        = number
-  default     = 3
+  default     = 1
 }
 
 /*******************

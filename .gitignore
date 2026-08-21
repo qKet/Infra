@@ -74,6 +74,13 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+# archive_file이 만드는 Lambda 배포 zip 빌드 산출물 (modules/lambda)
+**/.build/
+
+### Lambda (lambda/cancel-alert-mailer 등) ###
+# npm install --production으로 로컬에 설치한 의존성 — terraform apply 전에 매번 새로 설치하는 걸 전제
+**/lambda/**/node_modules/
+
 ### VisualStudioCode ###
 .vscode/*
 !.vscode/settings.json

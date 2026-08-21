@@ -1,0 +1,33 @@
+# ALB 자체의 AWS 쪽 설정 — 오늘 admin-ingress.tf의 scheme/tags/load-balancer-name/certificate-arn/
+# inbound-cidrs annotation에 해당. sourceRanges가 오늘의 inbound-cidrs와 정확히 같은 역할(팀원
+# IP 허용목록) — 처음엔 Gateway API에 이 필드가 없는 줄 알았는데 CRD 스키마를 직접 읽어보고
+# 있다는 걸 확인함(decisions/2026-08-20-ingress-to-gateway-api-migration 참고).
+apiVersion: gateway.k8s.aws/v1
+kind: LoadBalancerConfiguration
+metadata:
+  name: qket-gw-admin-lbconfig
+  namespace: {{ .Values.admin.namespace }}
+spec:
+  loadBalancerName: {{ .Values.admin.loadBalancerName }}
+  scheme: internet-facing
+  sourceRanges:
+    {{- range .Values.admin.allowedCidrs }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- if .Values.admin.grafana.certificateArn }}
+  listenerConfigurations:
+    - protocolPort: "HTTPS:443"
+      defaultCertificate: {{ .Values.admin.grafana.certificateArn }}
+      # SNI로 나머지 두 도메인 인증서도 같은 443 리스너에 붙임 — 하나의 ALB로 세 도메인 다 서빙.
+      certificates:
+        {{- if .Values.admin.argocd.certificateArn }}
+        - {{ .Values.admin.argocd.certificateArn }}
+        {{- end }}
+        {{- if .Values.admin.dev.certificateArn }}
+        - {{ .Values.admin.dev.certificateArn }}
+        {{- end }}
+  {{- end }}
+  tags:
+    {{- range $k, $v := .Values.admin.tags }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}

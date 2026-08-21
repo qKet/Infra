@@ -1,0 +1,43 @@
+# ElastiCache도 private-data 서브넷에만 배치.
+# 보안그룹은 이 모듈이 만들지 않고 modules/security_group에서 받아옴(var.security_group_id).
+resource "aws_elasticache_subnet_group" "this" {
+  name       = "${var.project_name}-redis-subnet-group-${var.environment}"
+  subnet_ids = var.private_data_subnet_ids
+}
+
+# 2026-08-18: aws_elasticache_cluster(단일 노드 전용 리소스)는 저장/전송 암호화 옵션을 아예
+# 지원하지 않음(AWS API 자체의 제약 — 암호화는 replication_group API에만 있음) — 그래서
+# aws_elasticache_replication_group으로 전환.
+#
+# transit_encryption_enabled는 아직 안 켬 — 켜려면 백엔드의 spring.data.redis 설정에
+# TLS(ssl.enabled=true)를 같이 넣어야 하는데 그건 이번 범위 밖. at_rest만 우선 적용.
+#
+# 주의: aws_elasticache_cluster -> aws_elasticache_replication_group은 리소스 타입 자체가
+# 바뀌는 거라(주소가 달라짐) apply 시 기존 클러스터를 지우고 새로 만듦 — Redis가 세션
+# 저장소(spring.session.store-type: redis)라 이 apply 순간 전체 로그인 세션이 끊김.
+# 트래픽 적은 시간대에 계획해서 apply할 것 (RDS처럼 데이터 영구 손실은 아니고 재로그인만 필요).
+#
+# 2026-08-19: SPOF(단일 장애점) 대응 — num_cache_clusters/automatic_failover_enabled/
+# multi_az_enabled를 변수로 빼서 환경별로 켤 수 있게 함. release에서 먼저 켜서 실제
+# failover 동작을 검증한 뒤 prod로 넓히기로 함(04_data/main.tf의 env_config_map 참고).
+# num_cache_clusters=1일 땐 automatic_failover_enabled/multi_az_enabled를 켜봐야 AWS가
+# 거부하므로(대신 받을 replica 자체가 없어서), 반드시 2 이상과 같이 켜야 함.
+resource "aws_elasticache_replication_group" "this" {
+  replication_group_id = "${var.project_name}-redis-${var.environment}"
+  description           = "${var.project_name} redis (${var.environment})"
+  engine                = "redis"
+  engine_version         = var.redis_engine_version
+  node_type              = var.redis_node_type
+  num_cache_clusters     = var.num_cache_clusters
+  parameter_group_name   = "default.redis7"
+  port                   = 6379
+
+  automatic_failover_enabled = var.automatic_failover_enabled
+  multi_az_enabled           = var.multi_az_enabled
+
+  at_rest_encryption_enabled = true
+  transit_encryption_enabled = false # TODO: 백엔드 TLS 지원 추가 후 true로 전환
+
+  subnet_group_name  = aws_elasticache_subnet_group.this.name
+  security_group_ids = [var.security_group_id]
+}

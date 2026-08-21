@@ -1,0 +1,48 @@
+# 실제 값은 전부 Terraform(main.tf)의 helm_release set 블록에서 주입한다.
+# 여기 값은 `helm lint`/`helm template`를 값 없이 돌려도 되게 하는 자리 표시자일 뿐.
+gatewayClassName: alb
+
+admin:
+  # Gateway/LoadBalancerConfiguration 오브젝트 자체가 놓일 네임스페이스 — 셋 중 어디든 상관없어서
+  # monitoring으로 고정. HTTPRoute는 각자 자기 백엔드 서비스와 같은 네임스페이스에 둔다
+  # (backendRef가 cross-namespace가 안 되게, ReferenceGrant 없이 깔끔하게).
+  namespace: monitoring
+  loadBalancerName: team5-qket-gw-admin-alb
+  allowedCidrs: []
+
+  grafana:
+    hostname: grafana.jun979.click
+    certificateArn: ""
+    serviceName: monitoring-grafana
+    servicePort: 80
+    healthCheckPath: /api/health
+
+  argocd:
+    hostname: cd.jun979.click
+    certificateArn: ""
+    namespace: argocd
+    serviceName: argocd-server
+    servicePort: 80
+    healthCheckPath: /healthz
+
+  dev:
+    hostname: dev.jun979.click
+    certificateArn: ""
+    namespace: qket-release
+    backend:
+      serviceName: qket-backend-service
+      servicePort: 80
+      healthCheckPort: "8081"
+      healthCheckPath: /actuator/health
+    frontend:
+      serviceName: qket-frontend-service
+      servicePort: 80
+      healthCheckPath: /healthz
+    faro:
+      serviceName: alloy-faro
+      namespace: monitoring
+      servicePort: 12347
+
+  tags:
+    Team: team5
+    Project: qket

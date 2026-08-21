@@ -1,0 +1,54 @@
+# 관리 도구 3종(grafana/argocd/dev) 공유 Gateway — 리스너 3개(각자 호스트네임의 HTTPS:443)를
+# 하나의 Gateway에 두면 ALB 컨트롤러가 자동으로 ALB 하나에 SNI 다중 인증서로 묶어준다(오늘
+# Ingress의 group.name과 동일 효과). http:80은 리다이렉트 전용(httproute-redirect.yaml).
+#
+# allowedRoutes.namespaces.from: All — HTTPRoute들이 각자 자기 백엔드와 같은 네임스페이스
+# (monitoring/argocd/qket-release)에 흩어져 있어서, Gateway 자신이 있는 네임스페이스(monitoring)
+# 하나로는 못 좁힘. cross-namespace HTTPRoute 첨부 자체는 ReferenceGrant가 필요 없음(그건
+# backendRef cross-namespace에만 필요 — dev의 faro 라우팅이 그 경우, gateway-api-faro 모듈 참고).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: qket-gw-admin
+  namespace: {{ .Values.admin.namespace }}
+spec:
+  gatewayClassName: {{ .Values.gatewayClassName }}
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+    {{- if .Values.admin.grafana.certificateArn }}
+    - name: grafana-https
+      protocol: HTTPS
+      port: 443
+      hostname: {{ .Values.admin.grafana.hostname }}
+      allowedRoutes:
+        namespaces:
+          from: All
+    {{- end }}
+    {{- if .Values.admin.argocd.certificateArn }}
+    - name: argocd-https
+      protocol: HTTPS
+      port: 443
+      hostname: {{ .Values.admin.argocd.hostname }}
+      allowedRoutes:
+        namespaces:
+          from: All
+    {{- end }}
+    {{- if .Values.admin.dev.certificateArn }}
+    - name: dev-https
+      protocol: HTTPS
+      port: 443
+      hostname: {{ .Values.admin.dev.hostname }}
+      allowedRoutes:
+        namespaces:
+          from: All
+    {{- end }}
+  infrastructure:
+    parametersRef:
+      group: gateway.k8s.aws
+      kind: LoadBalancerConfiguration
+      name: qket-gw-admin-lbconfig

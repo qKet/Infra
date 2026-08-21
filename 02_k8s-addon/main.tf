@@ -24,7 +24,7 @@ resource "kubernetes_namespace" "qket" {
   }
 }
 
-# ArgoCD
+# ArgoCD 설치 + Application 등록 — modules/addons/argocd로 뽑음.
 #
 # depends_on = [module.alb_controller] — ArgoCD도 자기 Service를 만드는데, ALB Controller는 설치되는
 # 순간부터 클러스터 전체의 Service 생성에 mutating webhook(mservice.elbv2.k8s.aws)을 건다. 이 둘이
@@ -33,22 +33,49 @@ resource "kubernetes_namespace" "qket" {
 # aws-load-balancer-webhook-service"로 실패한다(2026-08-10 실제로 겪음). module.alb_controller의
 # helm_release는 wait를 안 껐으니 기본값(true)대로 파드가 Ready될 때까지 기다린 뒤 "생성 완료"로
 # 표시되므로, 여기 depends_on만 걸면 그 뒤에 ArgoCD가 안전하게 따라가게 된다.
-resource "helm_release" "argocd" {
-  name             = "argocd"
-  repository       = "https://argoproj.github.io/argo-helm"
-  chart            = "argo-cd"
-  namespace        = "argocd"
-  create_namespace = true
+# 알림용 Gmail 자격증명(ESO 동기화)은 이 모듈 안에 중첩된 module.notifications_secrets가
+# 담당 — 2026-08-21: ESO 컨트롤러를 module.eso_controller(아래, 같은 root)로 옮기면서 예전에
+# 있던 cross-root CRD 순서 문제(ESO가 04_data라는 "다른 root"에 있어서 매번 "04_data의
+# module.eso를 먼저 apply해야 하는" 런북 절차가 필요했음)가 없어짐 — depends_on 하나로 충분.
+module "argocd" {
+  source = "../modules/addons/argocd"
 
-  # 2026-08-12: cd.jun979.click Ingress를 붙이면서 추가 — ALB가 TLS를 종료하고 뒤로는 평문
-  # HTTP로 넘기는데, ArgoCD 서버가 기본값(secure 모드)이면 자체적으로 TLS를 기대해서 핸드셰이크
-  # 실패로 이어짐. insecure 모드로 켜서 평문 HTTP로 받게 함(TLS는 이미 ALB가 처리했으므로 안전).
-  set {
-    name  = "configs.params.server\\.insecure"
-    value = "true"
-  }
+  project_name                    = var.project_name
+  aws_region                      = var.aws_region
+  argocd_notifications_secret_arn = data.terraform_remote_state.registry.outputs.argocd_notifications_secret_arn
+
+  depends_on = [module.alb_controller, module.eso_controller]
+}
+
+# ESO(External Secrets Operator) 컨트롤러 — release/prod(04_data)가 공유하는 진짜 singleton으로
+# 여기 딱 한 곳에만 설치. 04_data 각각의 module.eso는 이 역할(module.eso_controller.role_name)에
+# 자기 시크릿 ARN만큼 정책만 추가로 붙이고, SecretStore/ExternalSecret 같은 실제 동기화 규칙만
+# 만듦. extra_secret_arns로 넘기는 ArgoCD 알림용 시크릿은 이 root 안에서만 쓰이는 것이라(위
+# module.argocd의 notifications_secrets가 argocd 네임스페이스에서 동기화) 04_data가 아니라
+# 여기서 바로 권한을 붙임. 자세한 이전 이유는 modules/addons/eso-controller/main.tf 참고.
+module "eso_controller" {
+  source = "../modules/addons/eso-controller"
+
+  project_name = var.project_name
+
+  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
+  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  extra_secret_arns = [data.terraform_remote_state.registry.outputs.argocd_notifications_secret_arn]
 
   depends_on = [module.alb_controller]
+}
+
+
+
+# Gateway API core CRD + GatewayClass — Ingress의 후속 표준으로 전환하는 작업의 1단계
+# (release 환경 파일럿, 실 트래픽 영향 없음). module.alb_controller보다 반드시 "먼저" 있어야
+# 함(반대 방향 depends_on 없음, 대신 알b_controller 쪽에서 이 모듈을 기다림) — AWS Load Balancer
+# Controller가 부팅 시점에 딱 한 번 이 CRD 존재 여부로 자기 ALBGatewayAPI 기능을 켤지 정하기
+# 때문. 이유/실제 겪은 증상은 modules/addons/gateway-api-crds/main.tf 주석과 CLAUDE_LLM_WIKI
+# decisions/2026-08-2X-ingress-to-gateway-api-migration 참고.
+module "gateway_api_crds" {
+  source = "../modules/addons/gateway-api/crds"
 }
 
 # AWS Load Balancer Controller — Ingress 오브젝트를 보고 실제 ALB를 만들어주는 컨트롤러.
@@ -57,6 +84,11 @@ resource "helm_release" "argocd" {
 # ALB/타겟그룹/전용SG는 Terraform이 모르는 리소스라, destroy할 땐 반드시 helm uninstall(이 root의
 # destroy)이 EKS가 살아있는 동안 먼저 끝나야 함. 그래서 01_infrastructure가 아니라 여기(Layer 2,
 # k8s-addon)에 둠 — 자세한 이유는 CLAUDE_LLM_WIKI의 eks-destroy-layer-separation 문서 참고.
+#
+# depends_on = [module.gateway_api_crds] — 2026-08-20 추가: Gateway API CRD가 이 컨트롤러의
+# 부팅 시점에 이미 있어야 ALBGatewayAPI 기능이 켜진다(없으면 "Disabling ALBGatewayAPI: missing
+# required CRDs" 로그를 남기고 그 파드가 살아있는 동안 계속 비활성 — kubectl rollout restart로
+# 재부팅해야만 정상화됨, 실제로 겪음). 순서를 여기서 강제해두면 매일 아침 이 수동 재시작이 필요 없음.
 module "alb_controller" {
   source = "../modules/addons/alb-controller"
 
@@ -68,6 +100,157 @@ module "alb_controller" {
 
   oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
   oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  depends_on = [module.gateway_api_crds]
+}
+
+# Gateway API — prod 실제 컷오버(Ingress 완전 대체). prod는 아직 실서비스 오픈 전이라(2026-08-20
+# 기준) release와 함께 한 번에 진행했었는데, 같은 날 후속으로 release(dev.jun979.click)는
+# "개발 서버는 관리자만 들어가야 한다"는 결정에 따라 공개 ALB에서 admin Gateway
+# (module.gateway_api_admin)로 옮기고 여기서는 빠짐 — 그래서 for_each가 prod만 남음.
+# module.gateway_api_crds와 반대로, 이 모듈은 module.alb_controller "다음"에 있어야 한다(그
+# 컨트롤러 자신의 Helm 차트가 LoadBalancerConfiguration/TargetGroupConfiguration CRD를 제공하기
+# 때문 — modules/addons/gateway-api-crds/main.tf 주석 참고). alloy-faro Service를
+# cross-namespace로 참조하므로 module.gateway_api_faro(ReferenceGrant)에도 의존.
+locals {
+  ingress_config_public = { for k, v in local.ingress_config : k => v if k != "release" }
+}
+
+module "gateway_api_app" {
+  source   = "../modules/addons/gateway-api/pilot"
+  for_each = local.ingress_config_public
+
+  env                = each.key
+  namespace          = kubernetes_namespace.qket[each.key].metadata[0].name
+  hostname           = each.value.host
+  certificate_arn    = each.value.certificate_arn
+  load_balancer_name = "team5-qket-gw-${each.key}-alb"
+
+  depends_on = [
+    module.alb_controller,
+    module.gateway_api_crds,
+    module.gateway_api_faro,
+    module.alloy_faro,
+    kubernetes_namespace.qket,
+  ]
+}
+
+# alloy-faro(monitoring 네임스페이스)를 release/prod의 HTTPRoute가 cross-namespace로 참조할 수
+# 있게 하는 ReferenceGrant + TargetGroupConfiguration — release/prod가 같은 Service를 공유해서
+# env별 module.gateway_api_app/gateway_api_admin 인스턴스에 안 넣고 여기 한 번만 만든다
+# (modules/addons/gateway-api-faro/chart/Chart.yaml 참고). release가 이제 gateway_api_admin
+# 쪽으로 옮겨가도 namespace 목록(local.ingress_config 전체 키)은 그대로 release/prod 둘 다 필요.
+module "gateway_api_faro" {
+  source = "../modules/addons/gateway-api/faro"
+
+  allowed_namespaces = [for k in keys(local.ingress_config) : kubernetes_namespace.qket[k].metadata[0].name]
+
+  # module.monitoring — 이 모듈의 차트가 ReferenceGrant를 "monitoring" 네임스페이스(alloy-faro
+  # Service가 있는 곳)에 만드는데, 그 네임스페이스 자체를 module.monitoring이 만들어서 먼저
+  # 끝나야 함(2026-08-21 실제로 "namespaces monitoring not found"로 겪음).
+  depends_on = [module.alb_controller, module.gateway_api_crds, module.monitoring, kubernetes_namespace.qket]
+}
+
+# 관리 도구(Grafana/ArgoCD) + dev(release) 공유 admin Gateway — admin-ingress.tf의
+# kubernetes_ingress_v1.grafana/argocd를 대체하고, dev.jun979.click도 여기로 옮겨서 팀원 IP
+# 허용목록(var.admin_allowed_cidrs, variables.tf)을 셋 다 공유하게 함. 인증서는 전부
+# 03_registry가 만든 걸 remote_state로 읽어씀(위 ingress_config 주석 참고).
+# module.gateway_api_faro 이후에 있어야 함(dev의 /collect 라우팅이 그 ReferenceGrant를 씀).
+module "gateway_api_admin" {
+  source = "../modules/addons/gateway-api/admin"
+
+  admin_allowed_cidrs = var.admin_allowed_cidrs
+
+  grafana_certificate_arn = data.terraform_remote_state.registry.outputs.grafana_certificate_arn
+  argocd_certificate_arn  = data.terraform_remote_state.registry.outputs.argocd_certificate_arn
+
+  dev_hostname        = local.ingress_config.release.host
+  dev_certificate_arn = local.ingress_config.release.certificate_arn
+
+  depends_on = [
+    module.alb_controller,
+    module.gateway_api_crds,
+    module.gateway_api_faro,
+    module.alloy_faro,
+    module.monitoring,
+    module.argocd,
+    kubernetes_namespace.qket,
+  ]
+}
+
+# Cluster Autoscaler — 2026-08-20 Karpenter 마이그레이션 3단계로 완전히 제거함(방식 A: 전면
+# 교체). 이전에는 EKS 노드그룹(modules/eks)의 desired_size를 min~max(01_infrastructure/
+# variables.tf) 사이에서 자동 조절했으나, 이제 module.karpenter가 그 역할을 전담.
+# 3-1에서 helm_release만 먼저 destroy(2026-08-20)로 검증 후, 이 단계에서 모듈 전체 제거.
+# 과거 코드는 git history(이 커밋 이전)에서 확인 가능.
+
+# Karpenter — cluster-autoscaler를 대체하는 노드 오토스케일러. 1단계(IAM/SQS) → 2단계(Helm/
+# EC2NodeClass/NodePool) → 3단계(cluster-autoscaler 제거, 2026-08-20 진행 중)까지 완료.
+module "karpenter" {
+  source = "../modules/addons/karpenter"
+
+  project_name = var.project_name
+  aws_region   = var.aws_region
+  cluster_name = data.terraform_remote_state.infrastructure.outputs.eks_cluster_name
+
+  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
+  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  # 기존 노드그룹과 동일한 서브넷/보안그룹 재사용 — Karpenter 전용 discovery 태그 추가 불필요
+  node_subnet_ids           = data.terraform_remote_state.infrastructure.outputs.private_general_subnet_ids
+  cluster_security_group_id = data.terraform_remote_state.infrastructure.outputs.eks_cluster_security_group_id
+
+  depends_on = [module.alb_controller]
+}
+
+# EBS CSI 드라이버 addon — 원래 01_infrastructure(modules/eks)에 있었는데, 2026-08-21에 여기로
+# 옮김. 이유: 이 addon은 실제로 ACTIVE가 되려면 컨트롤러/데몬셋 파드가 뜰 노드가 있어야 하는데,
+# 01_infrastructure는 관리형 노드그룹이 없어져서(3단계, 노드는 전부 Karpenter가 만듦) 그 시점엔
+# 노드가 0개라 파드가 영원히 Pending → addon이 DEGRADED로 20분 타임아웃(실제로 겪음). Karpenter
+# 다음(=최소 1개 노드가 뜬 뒤)에 여기서 설치하면 이 문제가 없음.
+data "aws_iam_policy_document" "ebs_csi_assume" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(data.terraform_remote_state.infrastructure.outputs.oidc_provider_url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(data.terraform_remote_state.infrastructure.outputs.oidc_provider_url, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ebs_csi" {
+  name               = "${var.project_name}-ebs-csi-role"
+  assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi" {
+  role       = aws_iam_role.ebs_csi.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+
+resource "aws_eks_addon" "ebs_csi" {
+  cluster_name             = data.terraform_remote_state.infrastructure.outputs.eks_cluster_name
+  addon_name               = "aws-ebs-csi-driver"
+  service_account_role_arn = aws_iam_role.ebs_csi.arn
+
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  depends_on = [module.karpenter]
 }
 
 # ExternalDNS — ALB Controller가 만든 ALB의 주소를 Route53에 자동으로 연결
@@ -87,7 +270,9 @@ module "external_dns" {
   hosted_zone_id = "Z0111999JD2RHOSHTM8A" # jun979.click
   domain_filter  = "jun979.click"
 
-  depends_on = [module.alb_controller]
+  # module.gateway_api_crds가 먼저 있어야 함 — sources에 gateway-httproute를 켜놨는데
+  # (modules/addons/external-dns/main.tf 참고) 그 CRD가 없으면 external-dns 파드가 크래시루프 남.
+  depends_on = [module.alb_controller, module.gateway_api_crds]
 }
 
 # 모니터링 스택(Prometheus/Grafana/Alertmanager) — wiki decisions/2026-08-11-monitoring-stack-design 참고.
@@ -110,171 +295,110 @@ module "monitoring" {
   depends_on = [module.alb_controller]
 }
 
-# Grafana 대시보드 정의를 git에 저장 — EKS를 destroy/재생성해도 module.monitoring만 다시
-# apply하면 대시보드가 자동으로 돌아옴(module.monitoring의 sidecar.dashboards 설정이 이
-# ConfigMap을 grafana_dashboard=1 라벨로 찾아서 자동 로드). JSON은 Grafana UI의 dashboard
-# settings > JSON Model에서 export한 것을 그대로 커밋해두면 됨.
-resource "kubernetes_config_map" "grafana_dashboards" {
-  metadata {
-    name      = "qket-grafana-dashboards"
-    namespace = "monitoring"
-    labels = {
-      grafana_dashboard = "1"
-    }
-  }
+# 로그 저장소(Loki) — 프론트(Next.js SSR/미들웨어)·백엔드(Spring Boot) 파드가 찍는 로그를
+# 모아서 위 Grafana에서 같이 볼 수 있게 함. monitoring 모듈과 같은 네임스페이스(monitoring)에 설치.
+module "loki" {
+  source = "../modules/addons/loki"
 
-  data = {
-    "qket-monitoring.json" = file("${path.module}/dashboards/qket-monitoring.json")
-  }
+  project_name = var.project_name
+  aws_region   = var.aws_region
 
-  depends_on = [module.monitoring]
+  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
+  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  depends_on = [module.alb_controller]
 }
+
+# 노드마다 떠서 파드 로그를 Loki로 전송 — module.loki가 먼저 만들어져 있어야 보낼 곳이 있음.
+module "promtail" {
+  source = "../modules/addons/promtail"
+
+  depends_on = [module.loki]
+}
+
+# 브라우저(프론트엔드 Faro SDK)가 보내는 클릭/에러 이벤트를 받아서 Loki로 전달.
+module "alloy_faro" {
+  source = "../modules/addons/alloy-faro"
+
+  depends_on = [module.loki]
+}
+
+
+# Grafana 대시보드 ConfigMap은 modules/addons/monitoring으로 옮김(2026-08-21) — 그 모듈이
+# 이미 grafana/monitoring 네임스페이스 자체를 담당해서, 부속물인 이 ConfigMap도 거기 두는 게 맞음.
 
 # backend API 지표(응답시간, 요청수, HikariCP, JVM 등)를 Prometheus가 스크랩하게 등록.
 # wiki decisions/2026-08-11-monitoring-stack-design 문서상 "2차(나중)" 범위였던 앱 레벨 지표 —
-# release 환경만 우선 커버. backend Service(qket-backend-service)에 포트 이름이 없어서
-# port(이름) 대신 targetPort(번호)로 참조함 — Service에 `name: http`를 붙이면 더 표준적인
-# port 참조로 바꿀 수 있음.
-resource "kubernetes_manifest" "backend_service_monitor" {
-  manifest = {
-    apiVersion = "monitoring.coreos.com/v1"
-    kind       = "ServiceMonitor"
-    metadata = {
-      name      = "qket-backend"
-      namespace = "monitoring"
-      labels    = { release = "monitoring" }
-    }
-    spec = {
-      namespaceSelector = { matchNames = ["qket-release"] }
-      selector           = { matchLabels = { app = "qket-backend" } }
-      endpoints = [
-        { targetPort = 8080, path = "/api/actuator/prometheus", interval = "15s" }
-      ]
-    }
-  }
+# release 환경만 우선 커버.
+#
+# 2026-08-20: kubernetes_manifest에서 helm_release 기반 모듈로 전환 — kubernetes_manifest는
+# plan 시점에 ServiceMonitor CRD가 클러스터에 이미 있는지 확인하는데, 02_k8s-addon이 매일 밤
+# destroy→재생성되는 구조상 이게 매번 실패했음(3일 연속 재현, CLAUDE_LLM_WIKI
+# troubleshooting/crd-not-yet-installed-on-fresh-apply). helm_release는 이 문제 자체가 없어서
+# 매일 아침 `-target=module.monitoring` 선적용 없이도 그냥 apply 한 번으로 끝남. 실제
+# ServiceMonitor 내용/포트 관련 주석은 modules/addons/backend-servicemonitor/chart/templates/
+# servicemonitor.yaml 참고.
+module "backend_servicemonitor" {
+  source = "../modules/addons/backend-servicemonitor"
 
   depends_on = [module.monitoring]
 }
 
-# 환경별 Ingress 설정 — 원래 CD/helm/templates/ingress.yaml(ArgoCD가 배포)이 갖고 있었는데,
-# Terraform(alb_controller가 있는 이 root)으로 옮김: destroy 시 "Ingress가 alb_controller보다
-# 먼저 없어져야 한다"는 순서를 같은 state 안에서 depends_on으로 직접 강제하기 위해서.
-# (namespace cascade-delete에 기대던 이전 방식 대신 — 2026-08-10, eks-destroy-layer-separation 참고)
-# host는 CD/helm/values.yaml에도 그대로 남아있음(backend의 APP_BASE_URL이 참조) — 두 군데 다
-# "이 환경의 프론트 도메인"이라는 같은 사실을 나타내는 것뿐이라 굳이 하나로 합칠 필요는 없음.
+# KEDA — backend 오토스케일링용. 실제 스케일 규칙(ScaledObject)은 CD 레포(Helm)에 있고,
+# 여기는 그 규칙을 처리할 컨트롤러(엔진)만 설치. modules/addons/keda/main.tf 주석 참고.
+module "keda" {
+  source = "../modules/addons/keda"
+
+  depends_on = [module.alb_controller]
+}
+
+# metrics-server — KEDA(cpu trigger)가 만드는 HPA가 CPU 사용률을 읽으려면 이게 반드시 있어야 함.
+# 이게 없으면 HPA가 "unknown"으로 멈춰서 ScaledObject를 아무리 만들어도 절대 스케일 안 됨 —
+# 2026-08-13 부하테스트에서 4개 replica가 끝까지 안 늘어난 원인이 이거였음(modules/addons/metrics-server 참고).
+module "metrics_server" {
+  source = "../modules/addons/metrics-server"
+
+  depends_on = [module.alb_controller]
+}
+
+# 환경별 도메인/인증서 설정 — 예전엔 이 값들로 kubernetes_ingress_v1(app_ingress_backend/
+# app_ingress_frontend/faro_ingress) 3개를 만들었는데, 2026-08-20 Gateway API로 완전히
+# 대체하면서 그 3개 리소스는 삭제함 — 지금은 module.gateway_api_app(위)이 이 값을 그대로 받아서
+# Gateway/HTTPRoute를 만듦. host는 CD/helm/values.yaml에도 그대로 남아있음(backend의
+# APP_BASE_URL이 참조) — 두 군데 다 "이 환경의 프론트 도메인"이라는 같은 사실을 나타내는 것뿐이라
+# 굳이 하나로 합칠 필요는 없음.
+#
+# 인증서는 02_k8s-addon(매일 밤 destroy/재생성)이 아니라 03_registry(영구)에서 만들고
+# remote_state로 읽음 — 여기 두면 매일 아침 DNS 검증을 새로 거쳐야 해서(수 분간 HTTPS 불가) 안 됨.
 locals {
   ingress_config = {
     release = {
-      host            = "dev.jun979.click" # dev 쪽 Route53 추가 필요
-      certificate_arn = "arn:aws:acm:ap-northeast-2:727646470302:certificate/5e9cef50-c07b-4988-8317-88a1c5fa8e1c"
+      host            = "dev.jun979.click"
+      certificate_arn = data.terraform_remote_state.registry.outputs.dev_certificate_arn
     }
     prod = {
       host            = "app.jun979.click"
-      certificate_arn = "arn:aws:acm:ap-northeast-2:727646470302:certificate/a9789e71-7453-43d9-b0db-ad2ac973f4c0"
+      certificate_arn = data.terraform_remote_state.registry.outputs.app_certificate_arn
     }
   }
 }
 
-# 헬스체크를 위하여 두개로 나누기
-# 백엔드 k8s-ingress 
-resource "kubernetes_ingress_v1" "app_ingress_backend" {
-  for_each = local.ingress_config
-
-  metadata {
-    name      = "app-alb-ingress-backend"
-    namespace = kubernetes_namespace.qket[each.key].metadata[0].name
-
-    annotations = {
-      "alb.ingress.kubernetes.io/group.name"         = "qket"
-      "alb.ingress.kubernetes.io/group.order"        = "10"
-      "alb.ingress.kubernetes.io/tags"               = "Team=team5,Project=qket"
-      "alb.ingress.kubernetes.io/load-balancer-name" = "team5-qket-alb"
-      "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"        = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"    = each.value.certificate_arn
-      "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
-      "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
-      "alb.ingress.kubernetes.io/healthcheck-path"   = "/api/actuator/health"
-    }
-  }
-
-  spec {
-    ingress_class_name = "alb"
-
-    rule {
-      host = each.value.host
-
-      http {
-        path {
-          path      = "/api"
-          path_type = "Prefix"
-
-          backend {
-            service {
-              name = "qket-backend-service"
-              port {
-                number = 80
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  wait_for_load_balancer = false
-
-  depends_on = [module.alb_controller]
+# 개발용 스테이트풀셋 MySQL/Redis — release 환경의 RDS/ElastiCache를 완전히 대체. (비용/관리 부담 때문)
+data "aws_secretsmanager_secret_version" "dev_mysql_root" {
+  secret_id = data.terraform_remote_state.registry.outputs.dev_mysql_root_secret_arn
 }
 
-#프론트앤드 k8s-ingress
-resource "kubernetes_ingress_v1" "app_ingress_frontend" {
-  for_each = local.ingress_config
+module "dev_datastore" {
+  source = "../modules/addons/dev-datastore"
 
-  metadata {
-    name      = "app-alb-ingress-frontend"
-    namespace = kubernetes_namespace.qket[each.key].metadata[0].name
+  namespace = "qket-release"
 
-    annotations = {
-      "alb.ingress.kubernetes.io/group.name"         = "qket"
-      "alb.ingress.kubernetes.io/group.order"        = "20"
-      "alb.ingress.kubernetes.io/tags"               = "Team=team5,Project=qket"
-      "alb.ingress.kubernetes.io/load-balancer-name" = "team5-qket-alb"
-      "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"        = "ip"
-      "alb.ingress.kubernetes.io/certificate-arn"    = each.value.certificate_arn
-      "alb.ingress.kubernetes.io/ssl-redirect"       = "443"
-      "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTP\":80},{\"HTTPS\":443}]"
-      # healthcheck-path 안 줌 — 기본값 "/"이 frontend엔 이미 정상 응답이라 그대로 둠
-    }
-  }
+  mysql_ebs_volume_id = data.terraform_remote_state.registry.outputs.dev_mysql_ebs_volume_id
+  redis_ebs_volume_id = data.terraform_remote_state.registry.outputs.dev_redis_ebs_volume_id
+  availability_zone   = data.terraform_remote_state.registry.outputs.dev_datastore_availability_zone
 
-  spec {
-    ingress_class_name = "alb"
+  # 03_registry가 영구 보존
+  mysql_root_password = jsondecode(data.aws_secretsmanager_secret_version.dev_mysql_root.secret_string).password
 
-    rule {
-      host = each.value.host
-
-      http {
-        path {
-          path      = "/"
-          path_type = "Prefix"
-
-          backend {
-            service {
-              name = "qket-frontend-service"
-              port {
-                number = 80
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  # false로 둠 — ALB가 실제로 잘 떴는지는 aws elbv2 describe-load-balancers로 필요할 때 확인.
-  wait_for_load_balancer = false
-
-  depends_on = [module.alb_controller]
+  depends_on = [kubernetes_namespace.qket]
 }

@@ -1,6 +1,6 @@
 output "argocd_namespace" {
   description = "ArgoCD가 설치된 네임스페이스"
-  value       = helm_release.argocd.namespace
+  value       = module.argocd.namespace
 }
 
 output "qket_namespaces" {
@@ -21,4 +21,9 @@ output "external_dns_role_arn" {
 output "grafana_role_arn" {
   description = "Grafana IRSA IAM 역할 ARN (CloudWatch 읽기 전용)"
   value       = module.monitoring.grafana_role_arn
+}
+
+output "eso_role_name" {
+  description = "공유 ESO 컨트롤러 IRSA IAM 역할 이름 — 04_data(release/prod)의 module.eso가 여기에 정책을 추가로 붙일 때 씀"
+  value       = module.eso_controller.role_name
 }

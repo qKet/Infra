@@ -1,0 +1,20 @@
+{{- if .Values.pilot.enabled }}
+# ALB 자체의 AWS 쪽 설정 — 오늘 Ingress의 scheme/tags/load-balancer-name/certificate-arn annotation에 해당.
+apiVersion: gateway.k8s.aws/v1
+kind: LoadBalancerConfiguration
+metadata:
+  name: qket-gw-pilot-lbconfig
+  namespace: {{ .Values.pilot.namespace }}
+spec:
+  loadBalancerName: {{ .Values.pilot.loadBalancerName }}
+  scheme: internet-facing
+  {{- if .Values.pilot.certificateArn }}
+  listenerConfigurations:
+    - protocolPort: "HTTPS:443"
+      defaultCertificate: {{ .Values.pilot.certificateArn }}
+  {{- end }}
+  tags:
+    {{- range $k, $v := .Values.pilot.tags }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+{{- end }}

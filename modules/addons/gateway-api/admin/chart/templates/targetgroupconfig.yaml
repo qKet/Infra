@@ -1,0 +1,62 @@
+{{- if .Values.admin.grafana.certificateArn }}
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: qket-gw-admin-grafana-tgc
+  namespace: {{ .Values.admin.namespace }}
+spec:
+  targetReference:
+    kind: Service
+    name: {{ .Values.admin.grafana.serviceName }}
+  defaultConfiguration:
+    targetType: ip
+    healthCheckConfig:
+      healthCheckPath: {{ .Values.admin.grafana.healthCheckPath }}
+{{- end }}
+---
+{{- if .Values.admin.argocd.certificateArn }}
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: qket-gw-admin-argocd-tgc
+  namespace: {{ .Values.admin.argocd.namespace }}
+spec:
+  targetReference:
+    kind: Service
+    name: {{ .Values.admin.argocd.serviceName }}
+  defaultConfiguration:
+    targetType: ip
+    healthCheckConfig:
+      healthCheckPath: {{ .Values.admin.argocd.healthCheckPath }}
+{{- end }}
+---
+{{- if .Values.admin.dev.certificateArn }}
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: qket-gw-admin-dev-backend-tgc
+  namespace: {{ .Values.admin.dev.namespace }}
+spec:
+  targetReference:
+    kind: Service
+    name: {{ .Values.admin.dev.backend.serviceName }}
+  defaultConfiguration:
+    targetType: ip
+    healthCheckConfig:
+      healthCheckPort: {{ .Values.admin.dev.backend.healthCheckPort | quote }}
+      healthCheckPath: {{ .Values.admin.dev.backend.healthCheckPath }}
+---
+apiVersion: gateway.k8s.aws/v1
+kind: TargetGroupConfiguration
+metadata:
+  name: qket-gw-admin-dev-frontend-tgc
+  namespace: {{ .Values.admin.dev.namespace }}
+spec:
+  targetReference:
+    kind: Service
+    name: {{ .Values.admin.dev.frontend.serviceName }}
+  defaultConfiguration:
+    targetType: ip
+    healthCheckConfig:
+      healthCheckPath: {{ .Values.admin.dev.frontend.healthCheckPath }}
+{{- end }}
