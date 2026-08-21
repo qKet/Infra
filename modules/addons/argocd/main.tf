@@ -81,6 +81,15 @@ resource "kubectl_manifest" "qket_cd_app" {
   depends_on = [helm_release.this]
 }
 
+# prod ArgoCD Application — 2026-08-21: 팀 결정으로 prod 환경을 오픈하기로 하면서 release와
+# 같은 구조로 복원(직전까지 release 전용으로 단순화돼 있었음). CD 레포의 values-release.yaml +
+# values-prod.yaml을 함께 적용(release 공통값 위에 prod 전용값을 덮어씀).
+resource "kubectl_manifest" "qket_cd_app_prod" {
+  yaml_body = file("${path.module}/manifests/qket-cd-application-prod.yaml")
+
+  depends_on = [helm_release.this]
+}
+
 # ArgoCD 알림용 Gmail 자격증명을 ESO로 동기화 — ArgoCD가 아니면 쓸 일 없는 부속 기능이라
 # 별도 하위 모듈(notifications-secrets/)로 두되 이 argocd 모듈 밑에 중첩해서, "ArgoCD 관련된
 # 건 전부 이 폴더 밑에 있다"가 한눈에 보이게 함. 메커니즘/실패 격리 이유는 그 모듈 main.tf 참고.

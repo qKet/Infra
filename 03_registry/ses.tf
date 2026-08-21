@@ -35,3 +35,14 @@ resource "aws_route53_record" "ses_dkim" {
   ttl     = 600
   records = ["${element(aws_ses_domain_dkim.this.dkim_tokens, count.index)}.dkim.amazonses.com"]
 }
+
+# SPF — "이 도메인 메일은 Amazon SES를 통해서만 발송된다"를 선언하는 TXT 레코드.
+# DKIM(서명 검증)과 별개로 발신 출처 자체를 검증하는 용도라, 스팸함행 방지를 위해 DKIM과 같이 있어야 함.
+# apex(jun979.click) 도메인에 기존 TXT 레코드 없음을 확인 후 추가(2026-08-21, list-resource-record-sets로 확인).
+resource "aws_route53_record" "spf" {
+  zone_id = "Z0111999JD2RHOSHTM8A" # jun979.click
+  name    = "jun979.click"
+  type    = "TXT"
+  ttl     = 600
+  records = ["v=spf1 include:amazonses.com ~all"]
+}

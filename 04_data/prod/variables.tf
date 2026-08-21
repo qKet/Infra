@@ -67,6 +67,7 @@ variable "external_api_keys" {
     kakao_client_secret  = string
     naver_client_id      = string
     naver_client_secret  = string
+    openai_api_key = string
   })
   sensitive = true
   default = {
@@ -78,5 +79,6 @@ variable "external_api_keys" {
     kakao_client_secret  = ""
     naver_client_id      = ""
     naver_client_secret  = ""
+    openai_api_key = ""
   }
 }
