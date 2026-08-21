@@ -1,10 +1,8 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  # 라이브 상태의 기존 오브젝트 이름과 맞춤(qket-cd-release) — K8s 오브젝트는 이름을 못 바꾸므로
-  # 여기서 이름을 다르게 하면 terraform이 destroy+create로 처리하고, resources-finalizer 때문에
-  # 지금 release에 떠 있는 실제 배포물(backend/frontend)까지 연쇄 삭제됨. 반드시 이 이름 유지.
   name: qket-cd-release
+
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -22,10 +20,12 @@ spec:
     path: helm
     helm:
       valueFiles:
-        - values-release.yaml
+%{ for f in value_files ~}
+        - ${f}
+%{ endfor ~}
   destination:
     server: https://kubernetes.default.svc
-    namespace: qket-release
+    namespace: ${namespace}
   # KEDA(ScaledObject, CD 레포)가 qket-backend/qket-frontend Deployment의 replicas를 실시간으로
   # 바꾸는데, ArgoCD가 sync할 때마다 git에 적힌 고정값(*.replicas)으로 되돌리면 KEDA랑 계속
   # 충돌함(scale-up 해놓으면 다음 sync에 다시 줄어듦). replicas 필드만 ArgoCD가 diff/sync 대상에서
@@ -35,20 +35,20 @@ spec:
     - group: apps
       kind: Deployment
       name: qket-backend
-      namespace: qket-release
+      namespace: ${namespace}
       jsonPointers:
         - /spec/replicas
     - group: apps
       kind: Deployment
       name: qket-frontend
-      namespace: qket-release
+      namespace: ${namespace}
       jsonPointers:
         - /spec/replicas
   # automated(prune/selfHeal)는 일부러 안 씀 — 배포는 수동 Sync로 직접 트리거하는 방식을 유지하기로 함.
   # 대신 재시도/네임스페이스/finalizer 같은, 수동 sync와 무관하게 유용한 설정은 그대로 둠.
   syncPolicy:
     syncOptions:
-      # qket-release 네임스페이스는 01_infrastructure가 이미 만듦 — ArgoCD가 중복 소유하지 않게
+      # 네임스페이스는 01_infrastructure가 이미 만듦 — ArgoCD가 중복 소유하지 않게
       - CreateNamespace=false
     retry:
       limit: 5

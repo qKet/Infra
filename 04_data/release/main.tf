@@ -68,15 +68,18 @@ module "eso" {
   aws_region   = var.aws_region
   namespace    = "qket-${local.environment}"
 
-  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
-  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+  # 2026-08-21: ESO 컨트롤러 자체는 02_k8s-addon의 module.eso_controller(공유 singleton)가
+  # 이미 설치함 — 이 모듈은 그 역할 이름만 받아서 자기 시크릿 읽기 정책을 추가로 붙임(modules/
+  # addons/eso/iam.tf 참고).
+  eso_role_name = data.terraform_remote_state.k8s_addon.outputs.eso_role_name
 
   manage_db_redis_secrets = false //false 면 ESO 로테이션 동기화 X
 
   secret_recovery_window_days = local.secret_recovery_window_days
   external_api_keys           = var.external_api_keys
 
-  extra_secret_arns = [data.terraform_remote_state.registry.outputs.argocd_notifications_secret_arn]
+  # ArgoCD 알림용 시크릿 읽기 권한은 이제 02_k8s-addon의 module.eso_controller가 직접 붙임
+  # (그 시크릿을 쓰는 notifications_secrets도 같은 root라서) — 여기서 또 붙이면 중복.
 }
 
 # db-secrets — DB_HOST는 위 ConfigMap(app-config)에 이미 있어서 여기선 USERNAME/PASSWORD만.
