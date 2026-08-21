@@ -29,3 +29,9 @@ variable "availability_zone" {
   description = "EBS 볼륨이 있는 AZ — 이 AZ의 노드에만 파드가 뜨도록 강제(nodeAffinity)"
   type        = string
 }
+
+variable "mysql_root_password" {
+  description = "MySQL root 비밀번호 — 03_registry의 영구 시크릿(random_password.dev_mysql_root)에서 받아옴. 여기서 자체 생성하지 않는 이유: 이 모듈(02_k8s-addon)은 매일 밤 destroy/재생성되는데, MySQL 데이터 자체(EBS 볼륨)는 영구 보존이라 컨테이너가 둘째 날부터는 MYSQL_ROOT_PASSWORD 환경변수를 다시 안 읽음 — 매번 새로 생성하면 Terraform이 아는 값과 실제 MySQL 비밀번호가 어긋나는 드리프트가 생김"
+  type        = string
+  sensitive   = true
+}

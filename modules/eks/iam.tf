@@ -21,8 +21,41 @@ resource "aws_iam_role_policy_attachment" "eks_cluster" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 }
 
-# 워커 노드(EC2) IAM 역할 — 2026-08-20 Karpenter 마이그레이션 3-4(정리)로 제거함. 관리형
-# 노드그룹(aws_eks_node_group.this, eks.tf에서 3-3에 이미 제거)이 assume하던 역할이라 노드그룹이
-# 없어진 이상 완전히 고아(orphaned) 상태였음 — 노드 IAM은 이제 karpenter 모듈의
-# aws_iam_role.karpenter_node(modules/addons/karpenter/iam.tf)가 전담. 과거 코드는 git
-# history(이 커밋 이전)에서 확인 가능.
+# 부트스트랩 노드그룹(위 eks.tf) 전용 역할 — 2026-08-21 재도입(eks.tf 상단 주석 참고).
+# Karpenter가 만드는 노드는 별도로 modules/addons/karpenter/iam.tf의 aws_iam_role.karpenter_node를
+# 쓰고, 이 역할은 최초 부트스트랩 노드 1개만을 위한 것 — 순환 의존(karpenter 모듈이 02_k8s-addon
+# 소속이라 01_infrastructure가 그 역할을 참조할 수 없음) 없이 여기서 자체적으로 완결시킴.
+resource "aws_iam_role" "eks_node" {
+  name = "${var.project_name}-eks-node-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+# 노드가 클러스터에 join해서 kubelet으로 동작하는 데 필요한 기본 권한
+resource "aws_iam_role_policy_attachment" "eks_node_worker" {
+  role       = aws_iam_role.eks_node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+}
+
+# VPC CNI 플러그인이 파드에 ENI/IP를 붙여주는 데 필요한 권한
+resource "aws_iam_role_policy_attachment" "eks_node_cni" {
+  role       = aws_iam_role.eks_node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+}
+
+# ECR에서 컨테이너 이미지를 pull하는 데 필요한 권한
+resource "aws_iam_role_policy_attachment" "eks_node_ecr" {
+  role       = aws_iam_role.eks_node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}

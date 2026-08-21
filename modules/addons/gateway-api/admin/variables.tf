@@ -9,7 +9,8 @@ variable "grafana_hostname" {
 }
 
 variable "grafana_certificate_arn" {
-  type = string
+  description = "grafana 인증서 ARN — 03_registry가 만든 걸 호출부가 remote_state로 읽어서 넘김"
+  type        = string
 }
 
 variable "argocd_hostname" {
@@ -18,7 +19,8 @@ variable "argocd_hostname" {
 }
 
 variable "argocd_certificate_arn" {
-  type = string
+  description = "argocd 인증서 ARN — 03_registry가 만든 걸 호출부가 remote_state로 읽어서 넘김"
+  type        = string
 }
 
 variable "dev_hostname" {

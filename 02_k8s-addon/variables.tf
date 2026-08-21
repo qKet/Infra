@@ -10,7 +10,13 @@ variable "project_name" {
   default     = "team5-qket"
 }
 
-# 알림 "수신자"는 여기(Terraform 변수)가 아니라 Infra/argocd/qket-cd-app.yaml의
-# notifications.argoproj.io/subscribe.* annotation에서 직접 관리함 — Application별로 수신자가
-# 다를 수 있어서(qket-cd 말고 다른 Application이 생기면 그건 또 다른 사람이 받을 수도 있음)
-# Terraform 변수보다 Application manifest에 두는 게 더 맞음.
+variable "admin_allowed_cidrs" {
+  description = "grafana/argocd/dev(release) 공유 ALB에 접속 가능한 팀원 IP 허용목록 — 팀원 IP가 추가되면 default 리스트에 한 줄씩 추가하면 됨"
+  type        = list(string)
+  default = [
+    "222.111.119.115/32", # 윤준
+    "121.138.193.90/32",  # 채영
+    "162.120.184.59/32",  # 진호
+    "123.214.77.21/32"    # 우진
+  ]
+}

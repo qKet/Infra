@@ -1,0 +1,66 @@
+# ArgoCD 설치 + Application(qket-cd) 등록.
+#
+# depends_on(alb_controller)은 호출부(02_k8s-addon/main.tf)에서 이 모듈 자체에 걸어야 함 —
+# ArgoCD도 자기 Service를 만드는데, ALB Controller는 설치되는 순간부터 클러스터 전체의
+# Service 생성에 mutating webhook(mservice.elbv2.k8s.aws)을 건다. 이 둘이 순서 없이 동시에
+# apply되면, webhook은 이미 등록됐는데 그걸 처리해줄 컨트롤러 파드는 아직 Ready가 안 된 타이밍에
+# ArgoCD의 Service 생성이 걸려서 "no endpoints available for service
+# aws-load-balancer-webhook-service"로 실패한다(2026-08-10 실제로 겪음).
+resource "helm_release" "this" {
+  name             = "argocd"
+  repository       = "https://argoproj.github.io/argo-helm"
+  chart            = "argo-cd"
+  namespace        = "argocd"
+  create_namespace = true
+
+  # 2026-08-12: cd.jun979.click Ingress를 붙이면서 추가 — ALB가 TLS를 종료하고 뒤로는 평문
+  # HTTP로 넘기는데, ArgoCD 서버가 기본값(secure 모드)이면 자체적으로 TLS를 기대해서 핸드셰이크
+  # 실패로 이어짐. insecure 모드로 켜서 평문 HTTP로 받게 함(TLS는 이미 ALB가 처리했으므로 안전).
+  set {
+    name  = "configs.params.server\\.insecure"
+    value = "true"
+  }
+
+  # ArgoCD Notifications — Out-of-Sync 감지/Sync 실패/Degraded 시 이메일(Gmail SMTP)로 알림.
+  # 실제 로그인 계정/비밀번호는 여기 안 넣고 아래 module.notifications_secrets가 따로 만드는
+  # Secret(argocd-notifications-secret)을 "$키이름" 문법으로 참조하게 함 — 이 파일이
+  # git에 커밋돼도 자격증명이 노출되지 않게 하기 위함. secret.create=false로 둬서 차트가 자체
+  # Secret을 만들지 않고, 우리가 별도로 만든 Secret을 그대로 쓰게 함.
+  #
+  # ⚠️ 적용 전 확인할 것: `helm show values argo/argo-cd | grep -A5 notifications`로 이 버전 차트가
+  # notifications.notifiers/templates/triggers/secret.create 키를 그대로 쓰는지 확인 — 차트 버전에
+  # 따라 값 경로가 다를 수 있음.
+  #
+  # values/notifications.yaml로 분리 — 변수 치환이 전혀 없는 순수 YAML이라 templatefile() 없이
+  # file()로 그대로 읽음.
+  values = [file("${path.module}/values/notifications.yaml")]
+}
+
+# ArgoCD Application 등록 — 예전엔 Infra/argocd/qket-cd-app.yaml을 사람이 매번 수동으로
+# `kubectl apply`해야 했음(02_k8s-addon이 매일 밤 destroy→아침 재생성될 때마다 Application
+# 등록이 같이 날아가서, 안 하면 ArgoCD가 "텅 비어있는" 상태로 뜸). 이제 이 root를 apply하면
+# 자동으로 같이 생성됨 — 더 이상 사람이 따로 기억해서 실행할 필요 없음.
+#
+# CD 레포가 raw manifest(release/) 구조에서 Helm 차트(helm/) 구조로 바뀌면서 path도 같이 고침 —
+# "release"라는 경로는 이제 CD 레포에 없음(release(backup)/으로 이름이 바뀐 옛날 raw manifest).
+# release 환경은 helm/values.yaml 자체가 이미 release 기준 값(namespace: qket-release 등)을
+# 직접 담고 있어서 valueFiles를 따로 안 줘도 됨 — ArgoCD의 Helm source가 기본으로 values.yaml을 씀.
+#
+# manifests/qket-cd-application.yaml로 분리 — 변수 치환 없는 순수 YAML이라 file()로 그대로 읽음.
+resource "kubectl_manifest" "qket_cd_app" {
+  yaml_body = file("${path.module}/manifests/qket-cd-application.yaml")
+
+  depends_on = [helm_release.this]
+}
+
+# ArgoCD 알림용 Gmail 자격증명을 ESO로 동기화 — ArgoCD가 아니면 쓸 일 없는 부속 기능이라
+# 별도 하위 모듈(notifications-secrets/)로 두되 이 argocd 모듈 밑에 중첩해서, "ArgoCD 관련된
+# 건 전부 이 폴더 밑에 있다"가 한눈에 보이게 함. 메커니즘/실패 격리 이유는 그 모듈 main.tf 참고.
+module "notifications_secrets" {
+  source = "./notifications-secrets"
+
+  aws_region = var.aws_region
+  secret_arn = var.argocd_notifications_secret_arn
+
+  depends_on = [helm_release.this]
+}

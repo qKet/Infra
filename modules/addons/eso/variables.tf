@@ -28,19 +28,29 @@ variable "oidc_provider_url" {
   type        = string
 }
 
+variable "manage_db_redis_secrets" {
+  description = "db-secrets/redis-secrets를 이 모듈(ESO)로 관리할지 여부. false면 connection 시크릿과 external_secret_db/redis를 아예 안 만듦 — DB_HOST/REDIS_HOST가 하드코딩 가능한 고정값이고 비밀번호도 절대 안 바뀌는 환경(release의 dev-datastore)은 ESO의 로테이션 동기화가 필요 없어서 끔. 그런 환경은 호출부에서 db-secrets를 plain kubernetes_secret으로 직접 만듦."
+  type        = bool
+  default     = true
+}
+
+# 아래 세 개는 manage_db_redis_secrets=true일 때만 실제로 쓰임 — false면 안 넘겨도 되게 기본값을 둠.
 variable "rds_master_user_secret_arn" {
   description = "RDS가 자동 생성한 마스터 계정 Secrets Manager ARN (건드리지 않고 읽기만 함)"
   type        = string
+  default     = ""
 }
 
 variable "rds_endpoint" {
   description = "RDS 엔드포인트 — connection 시크릿의 DB_HOST 값으로 씀"
   type        = string
+  default     = ""
 }
 
 variable "redis_endpoint" {
   description = "ElastiCache Redis 엔드포인트 — connection 시크릿의 REDIS_HOST 값으로 씀"
   type        = string
+  default     = ""
 }
 
 variable "secret_recovery_window_days" {

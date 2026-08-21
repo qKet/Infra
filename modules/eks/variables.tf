@@ -13,7 +13,32 @@ variable "cluster_subnet_ids" {
   type        = list(string)
 }
 
-# node_subnet_ids/node_instance_types/node_desired_size/node_min_size/node_max_size는
-# 2026-08-20 Karpenter 마이그레이션 3-4(정리)로 제거함 — 전부 관리형 노드그룹(3-3에서 제거)
-# 전용 변수였음. 노드 크기/서브넷 결정은 이제 02_k8s-addon/module.karpenter의 NodePool/
-# EC2NodeClass가 담당.
+# 2026-08-21 재도입: Karpenter 컨트롤러 자신도, CoreDNS/EBS CSI 같은 kube-system 파드도
+# "뜰 노드가 하나도 없으면" 영원히 Pending에 멈추는 데드락이 실제로 발생함(관리형 노드그룹을
+# 완전히 없앤 뒤, 완전히 빈 계정에서 처음 apply할 때 재현) — Karpenter가 노드를 만들려면
+# 먼저 Karpenter 자신이 뜰 곳이 있어야 하는데, 그 "최초의 곳"이 없었던 게 원인. 그래서 최소
+# 부트스트랩용 노드 1개(고정, 오토스케일 안 함 — 그 역할은 전부 Karpenter가 전담)를 다시 둠.
+variable "node_subnet_ids" {
+  description = "부트스트랩 노드가 배치될 서브넷 (프라이빗-일반)"
+  type        = list(string)
+}
+
+variable "node_instance_types" {
+  description = "부트스트랩 노드그룹 EC2 인스턴스 타입"
+  type        = list(string)
+}
+
+variable "node_desired_size" {
+  description = "부트스트랩 노드 수 — Karpenter가 뜰 때까지 필요한 최소 floor라 1 고정"
+  type        = number
+}
+
+variable "node_min_size" {
+  description = "부트스트랩 노드 최소 수 — 1 고정(오토스케일링은 Karpenter가 전담)"
+  type        = number
+}
+
+variable "node_max_size" {
+  description = "부트스트랩 노드 최대 수 — 1 고정(오토스케일링은 Karpenter가 전담)"
+  type        = number
+}

@@ -1,7 +1,12 @@
 # RDS 자동 생성 시크릿(username/password)은 그대로 두고 안 건드림.
 # 여기선 "진짜 비밀은 아니지만 접속 정보"인 DB_HOST/REDIS_HOST만 담는 별도 시크릿을 새로 만듦.
 # 이렇게 나누면 RDS가 관리하는 시크릿의 모양(로테이션 등)에 우리가 손대는 일이 없음.
+#
+# manage_db_redis_secrets=false면 이 시크릿 자체를 안 만듦 — DB_HOST/REDIS_HOST가 하드코딩 가능한
+# 고정값인 환경(release)은 CD 쪽에서 직접 하드코딩하므로 이 시크릿이 필요 없음.
 resource "aws_secretsmanager_secret" "connection" {
+  count = var.manage_db_redis_secrets ? 1 : 0
+
   name = "${var.project_name}-connection-${var.environment}"
 
   # release는 자주 destroy/재생성하는 샌드박스라, 기본 대기기간(최대 30일) 뒤에 지워지면
@@ -11,7 +16,9 @@ resource "aws_secretsmanager_secret" "connection" {
 }
 
 resource "aws_secretsmanager_secret_version" "connection" {
-  secret_id = aws_secretsmanager_secret.connection.id
+  count = var.manage_db_redis_secrets ? 1 : 0
+
+  secret_id = aws_secretsmanager_secret.connection[0].id
   secret_string = jsonencode({
     DB_HOST    = var.rds_endpoint
     REDIS_HOST = var.redis_endpoint

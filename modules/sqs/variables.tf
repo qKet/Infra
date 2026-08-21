@@ -18,3 +18,9 @@ variable "visibility_timeout_seconds" {
   type        = number
   default     = 60
 }
+
+variable "sender_role_name" {
+  description = "이 큐에 SendMessage 권한을 줄 IAM 역할 이름 — 빈 문자열이면 권한을 안 만듦"
+  type        = string
+  default     = ""
+}

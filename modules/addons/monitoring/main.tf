@@ -169,3 +169,28 @@ resource "helm_release" "monitoring" {
     value = "proxy"
   }
 }
+
+# Grafana 대시보드 정의를 git에 저장 — EKS를 destroy/재생성해도 이 모듈만 다시 apply하면
+# 대시보드가 자동으로 돌아옴(위 helm_release의 sidecar.dashboards 설정이 이 ConfigMap을
+# grafana_dashboard=1 라벨로 찾아서 자동 로드). JSON은 Grafana UI의 dashboard
+# settings > JSON Model에서 export한 것을 그대로 커밋해두면 됨.
+resource "kubernetes_config_map" "grafana_dashboards" {
+  metadata {
+    name      = "qket-grafana-dashboards"
+    namespace = "monitoring"
+    labels = {
+      grafana_dashboard = "1"
+    }
+  }
+
+  data = {
+    "qket-monitoring.json" = file("${path.module}/dashboards/qket-monitoring.json")
+    # 2026-08-19: 백엔드/프론트(SSR)/브라우저(Faro) 로그를 매번 쿼리 바꿔가며 Explore에서
+    # 찾아보는 대신, 패널 3개로 한 화면에 고정해둔 대시보드. 3번째 패널(브라우저 이벤트)의
+    # 쿼리는 Alloy faro.receiver가 실제로 붙이는 라벨을 아직 확정 못 해서 임시로 텍스트
+    # 필터(|= "qket-frontend")만 걸어둠 — Grafana에서 실제 라벨 확인되면 라벨 매처로 교체 필요.
+    "qket-logs.json" = file("${path.module}/dashboards/qket-logs.json")
+  }
+
+  depends_on = [helm_release.monitoring]
+}
