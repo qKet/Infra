@@ -7,13 +7,16 @@
 # 눈으로 매핑해야 하는 부담이 커져서, 진짜 YAML 문법 그대로 파일로 관리하고 변수만 ${...}로 주입.
 # 리팩터링 전후로 terraform plan에 diff가 없는지(렌더링 결과가 기존 yamlencode와 동일한지) 확인함.
 
+# 2026-08-21: ESO 컨트롤러(helm_release)가 02_k8s-addon(다른 root)으로 옮겨가면서 여기엔 더 이상
+# 그 리소스가 없음 — depends_on을 걸 대상이 같은 root에 없다는 뜻. kubectl_manifest는
+# kubernetes_manifest와 달리 plan 시점에 CRD 존재를 확인하지 않아서(main.tf 옛 주석 참고,
+# 지금은 삭제됨) 문제가 없고, apply 순서는 확립된 root 순서(infrastructure→k8s-addon→data)가
+# 그대로 보장해줌 — 02_k8s-addon이 항상 먼저 apply되므로 이 시점엔 컨트롤러가 이미 떠 있음.
 resource "kubectl_manifest" "secret_store" {
   yaml_body = templatefile("${path.module}/manifests/secret-store.yaml.tpl", {
     namespace  = var.namespace
     aws_region = var.aws_region
   })
-
-  depends_on = [helm_release.external_secrets]
 }
 
 # manage_db_redis_secrets=false면 이 리소스 자체를 안 만듦 — release처럼 DB 비밀번호가 절대 안

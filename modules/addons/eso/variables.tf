@@ -18,13 +18,8 @@ variable "namespace" {
   type        = string
 }
 
-variable "oidc_provider_arn" {
-  description = "IRSA용 OIDC 프로바이더 ARN (module.eks 출력값)"
-  type        = string
-}
-
-variable "oidc_provider_url" {
-  description = "IRSA용 OIDC 프로바이더 URL (module.eks 출력값)"
+variable "eso_role_name" {
+  description = "02_k8s-addon의 module.eso_controller가 만든 공유 ESO IRSA 역할 이름 — 이 모듈은 이 역할을 직접 만들지 않고, 자기 시크릿 ARN만큼 정책을 추가로 붙이기만 함(iam.tf 참고)."
   type        = string
 }
 

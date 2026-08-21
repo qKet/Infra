@@ -139,11 +139,15 @@ resource "kubernetes_config_map" "app_config" {
 # 시크릿(DB_HOST/REDIS_HOST)을 합쳐서 CD 헬름 차트(values-prod.yaml의 backend.secrets)가 기대하는
 # 그 두 개(db-secrets, redis-secrets)를 정확히 만들어냄.
 #
-# 02_k8s-addon이 아니라 여기(04_data/prod)에 두는 이유: rds_master_user_secret_arn/rds_endpoint/redis_endpoint가
-# 전부 이 root가 만든 값이라, k8s-addon(04_data보다 먼저 apply됨)에 두면 아직 없는 값을 참조하는
-# 순환 의존이 생김. 대신 namespace(qket-prod)가 02_k8s-addon 소관이라 매일 밤 destroy될 때
-# 이 db-secrets/redis-secrets도 같이 사라지므로, IRSA ServiceAccount/ConfigMap과 마찬가지로 아침에
-# 이 root를 다시 apply해야 함 — 자세한 내용은 CLAUDE_LLM_WIKI의 daily-infrastructure-toggle 문서 참고.
+# 컨트롤러 자체(Helm 릴리즈/IRSA 역할/CRD)는 02_k8s-addon의 module.eso_controller(공유
+# singleton)가 담당 — 여기 이 모듈은 SecretStore/ExternalSecret 같은 이 환경(prod) 전용 동기화
+# 규칙만 만들고, 그 공유 역할에 자기 시크릿 읽기 정책만 추가로 붙임(2026-08-21, 예전엔 release/prod가
+# 각자 컨트롤러까지 설치하며 이름 충돌/CRD 소유권 충돌이 났었음 — modules/addons/eso-controller/
+# main.tf 참고). rds_master_user_secret_arn/rds_endpoint/redis_endpoint가 이 root가 만든 값이라
+# 컨트롤러 자체는 여전히 여기 둘 수 없음(순환 의존) — SecretStore/ExternalSecret만 여기 있는 이유.
+# namespace(qket-prod)가 02_k8s-addon 소관이라 매일 밤 destroy될 때 이 db-secrets/redis-secrets도
+# 같이 사라지므로, IRSA ServiceAccount/ConfigMap과 마찬가지로 아침에 이 root를 다시 apply해야 함
+# — 자세한 내용은 CLAUDE_LLM_WIKI의 daily-infrastructure-toggle 문서 참고.
 module "eso" {
   source = "../../modules/addons/eso"
 
@@ -152,8 +156,7 @@ module "eso" {
   aws_region   = var.aws_region
   namespace    = "qket-${local.environment}"
 
-  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
-  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+  eso_role_name = data.terraform_remote_state.k8s_addon.outputs.eso_role_name
 
   rds_master_user_secret_arn = module.rds.rds_master_user_secret_arn
   rds_endpoint               = module.rds.rds_endpoint
@@ -162,7 +165,8 @@ module "eso" {
   secret_recovery_window_days = local.secret_recovery_window_days
   external_api_keys           = var.external_api_keys
 
-  extra_secret_arns = [data.terraform_remote_state.registry.outputs.argocd_notifications_secret_arn]
+  # ArgoCD 알림용 시크릿 읽기 권한은 이제 02_k8s-addon의 module.eso_controller가 직접 붙임
+  # (그 시크릿을 쓰는 notifications_secrets도 같은 root라서) — 여기서 또 붙이면 중복.
 }
 
 # 예매 오픈 알림 — 백엔드의 @Scheduled 스위퍼가 5분마다 publish, Lambda가 consume. release/prod

@@ -19,3 +19,15 @@ data "terraform_remote_state" "registry" {
     region = "ap-northeast-2"
   }
 }
+
+# 02_k8s-addon이 만든 공유 ESO 컨트롤러의 IRSA 역할 이름을 읽어오기 위함(module.eso의
+# eso_role_name에 씀 — 2026-08-21, ESO 컨트롤러를 02_k8s-addon으로 옮긴 뒤로 필요해짐)
+data "terraform_remote_state" "k8s_addon" {
+  backend = "s3"
+
+  config = {
+    bucket = "team5-qket-tfstate-727646470302"
+    key    = "k8s-addon/terraform.tfstate"
+    region = "ap-northeast-2"
+  }
+}

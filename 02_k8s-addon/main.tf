@@ -34,17 +34,34 @@ resource "kubernetes_namespace" "qket" {
 # helm_release는 wait를 안 껐으니 기본값(true)대로 파드가 Ready될 때까지 기다린 뒤 "생성 완료"로
 # 표시되므로, 여기 depends_on만 걸면 그 뒤에 ArgoCD가 안전하게 따라가게 된다.
 # 알림용 Gmail 자격증명(ESO 동기화)은 이 모듈 안에 중첩된 module.notifications_secrets가
-# 담당 — 2026-08-20: kubectl_manifest에서 helm_release 기반으로 전환한 이유(ESO CRD가
-# 04_data라는 "다른 root"에 있어서 생기는 cross-root plan-time 확인 문제, CLAUDE_LLM_WIKI
-# troubleshooting/crd-not-yet-installed-on-fresh-apply 참고)는 modules/addons/argocd/
-# notifications-secrets/main.tf에 그대로 있음 — 04_data의 module.eso를 먼저 apply해야 하는
-# 런북 절차(daily-infrastructure-toggle) 자체는 여전히 필요.
+# 담당 — 2026-08-21: ESO 컨트롤러를 module.eso_controller(아래, 같은 root)로 옮기면서 예전에
+# 있던 cross-root CRD 순서 문제(ESO가 04_data라는 "다른 root"에 있어서 매번 "04_data의
+# module.eso를 먼저 apply해야 하는" 런북 절차가 필요했음)가 없어짐 — depends_on 하나로 충분.
 module "argocd" {
   source = "../modules/addons/argocd"
 
   project_name                    = var.project_name
   aws_region                      = var.aws_region
   argocd_notifications_secret_arn = data.terraform_remote_state.registry.outputs.argocd_notifications_secret_arn
+
+  depends_on = [module.alb_controller, module.eso_controller]
+}
+
+# ESO(External Secrets Operator) 컨트롤러 — release/prod(04_data)가 공유하는 진짜 singleton으로
+# 여기 딱 한 곳에만 설치. 04_data 각각의 module.eso는 이 역할(module.eso_controller.role_name)에
+# 자기 시크릿 ARN만큼 정책만 추가로 붙이고, SecretStore/ExternalSecret 같은 실제 동기화 규칙만
+# 만듦. extra_secret_arns로 넘기는 ArgoCD 알림용 시크릿은 이 root 안에서만 쓰이는 것이라(위
+# module.argocd의 notifications_secrets가 argocd 네임스페이스에서 동기화) 04_data가 아니라
+# 여기서 바로 권한을 붙임. 자세한 이전 이유는 modules/addons/eso-controller/main.tf 참고.
+module "eso_controller" {
+  source = "../modules/addons/eso-controller"
+
+  project_name = var.project_name
+
+  oidc_provider_arn = data.terraform_remote_state.infrastructure.outputs.oidc_provider_arn
+  oidc_provider_url = data.terraform_remote_state.infrastructure.outputs.oidc_provider_url
+
+  extra_secret_arns = [data.terraform_remote_state.registry.outputs.argocd_notifications_secret_arn]
 
   depends_on = [module.alb_controller]
 }

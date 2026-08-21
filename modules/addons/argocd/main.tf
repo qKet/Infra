@@ -41,15 +41,42 @@ resource "helm_release" "this" {
 # 등록이 같이 날아가서, 안 하면 ArgoCD가 "텅 비어있는" 상태로 뜸). 이제 이 root를 apply하면
 # 자동으로 같이 생성됨 — 더 이상 사람이 따로 기억해서 실행할 필요 없음.
 #
-# CD 레포가 raw manifest(release/) 구조에서 Helm 차트(helm/) 구조로 바뀌면서 path도 같이 고침 —
-# "release"라는 경로는 이제 CD 레포에 없음(release(backup)/으로 이름이 바뀐 옛날 raw manifest).
-# 2026-08-21: CD 레포의 values.yaml → values-release.yaml로 개명(release 값이라는 걸 이름으로
-# 명확히 함, prod용 values-prod.yaml과 대칭) — Helm은 파일명이 정확히 "values.yaml"일 때만
-# 자동으로 읽어서, 개명 후에는 valueFiles로 명시해야 함(안 하면 빈 기본값으로 배포 시도).
-#
-# manifests/qket-cd-application.yaml로 분리 — 변수 치환 없는 순수 YAML이라 file()로 그대로 읽음.
+# 2026-08-21: prod 도입하면서 release/prod 둘 다 만들게 for_each로 변경. release Application
+# 이름은 기존 그대로 "qket-cd"(2026-08-21 이전부터 이미 이 이름으로 실제 운영 중이라 바꾸면
+# finalizer 때문에 기존 backend/frontend가 한 번 cascade delete됨 — state mv로 이어붙임).
+# CD 레포의 values.yaml → values-release.yaml로 개명(release 값이라는 걸 이름으로 명확히 함,
+# prod용 values-prod.yaml과 대칭)했고, Helm은 파일명이 정확히 "values.yaml"일 때만 자동으로
+# 읽어서 개명 후에는 valueFiles로 명시해야 함 — prod는 release 값을 베이스로 깔고
+# values-prod.yaml로 덮어씀(레이어링).
+# 2026-08-21 이름 재정리: "qket-cd"는 prod(main 브랜치)가 가져가고, release는 "qket-cd-release"로
+# 개명 — release가 지금 이 이름(qket-cd)으로 이미 떠있어서 개명 시 finalizer 제거 절차 필요함
+# (K8s 오브젝트 이름은 불변이라, 그냥 이름만 바꾸면 새 오브젝트가 생기고 기존 건 고아로 남음 —
+# 안전한 절차는 CLAUDE_LLM_WIKI 참고).
+locals {
+  cd_applications = {
+    release = {
+      app_name    = "qket-cd-release"
+      namespace   = "qket-release"
+      value_files = ["values-release.yaml"]
+    }
+    prod = {
+      app_name    = "qket-cd"
+      namespace   = "qket-prod"
+      value_files = ["values-release.yaml", "values-prod.yaml"]
+    }
+  }
+}
+
+# manifests/qket-cd-application.yaml.tpl로 분리 — value_files 리스트만 변수 치환 필요해서
+# templatefile() 사용.
 resource "kubectl_manifest" "qket_cd_app" {
-  yaml_body = file("${path.module}/manifests/qket-cd-application.yaml")
+  for_each = local.cd_applications
+
+  yaml_body = templatefile("${path.module}/manifests/qket-cd-application.yaml.tpl", {
+    app_name    = each.value.app_name
+    namespace   = each.value.namespace
+    value_files = each.value.value_files
+  })
 
   depends_on = [helm_release.this]
 }

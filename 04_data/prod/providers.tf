@@ -1,5 +1,7 @@
-# 2026-08-10: ESO(External Secrets Operator) 재활성화하면서 helm/kubectl provider 추가함
-# (module.eso가 helm_release + kubectl_manifest를 씀 — modules/eso/helm.tf, sync.tf 참고).
+# 2026-08-10: ESO(External Secrets Operator) 재활성화하면서 kubectl provider 추가함
+# (module.eso가 kubectl_manifest를 씀 — sync.tf 참고). helm provider는 2026-08-21 ESO 컨트롤러가
+# 02_k8s-addon(공유 singleton, module.eso_controller)으로 옮겨가면서 이 root엔 더 이상 helm_release를
+# 쓰는 리소스가 없어져서 제거함.
 terraform {
   required_version = ">= 1.5"
 
@@ -11,10 +13,6 @@ terraform {
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.30"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.14"
     }
     kubectl = {
       source  = "gavinbunney/kubectl"
@@ -50,19 +48,6 @@ provider "kubernetes" {
     command     = "aws"
     # --role-arn 없이 plain 신원으로 인증하면 EKS Access Entry가 role한테만 등록돼있어서 Unauthorized남.
     args = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.infrastructure.outputs.eks_cluster_name, "--region", var.aws_region, "--role-arn", data.terraform_remote_state.infrastructure.outputs.cluster_admin_role_arn]
-  }
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = data.terraform_remote_state.infrastructure.outputs.eks_cluster_endpoint
-    cluster_ca_certificate = base64decode(data.terraform_remote_state.infrastructure.outputs.eks_cluster_certificate_authority)
-
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", data.terraform_remote_state.infrastructure.outputs.eks_cluster_name, "--region", var.aws_region, "--role-arn", data.terraform_remote_state.infrastructure.outputs.cluster_admin_role_arn]
-    }
   }
 }
 
