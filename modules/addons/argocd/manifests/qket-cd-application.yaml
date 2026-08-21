@@ -17,6 +17,9 @@ spec:
     repoURL: https://github.com/qKet/CD.git
     targetRevision: main
     path: helm
+    helm:
+      valueFiles:
+        - values-release.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: qket-release
