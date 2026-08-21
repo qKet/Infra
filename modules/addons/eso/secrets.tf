@@ -48,6 +48,7 @@ resource "aws_secretsmanager_secret_version" "external_api" {
     KAKAO_CLIENT_SECRET  = var.external_api_keys.kakao_client_secret
     NAVER_CLIENT_ID      = var.external_api_keys.naver_client_id
     NAVER_CLIENT_SECRET  = var.external_api_keys.naver_client_secret
+    OPENAI_API_KEY = var.external_api_keys.openai_api_key
   })
 
   lifecycle {
