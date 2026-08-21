@@ -36,6 +36,17 @@ const TEMPLATES = {
       `${b.performanceTitle} 예매가 취소되었습니다.\n\n` +
       `공연 일시: ${b.roundTime}\n좌석: ${b.seatInfo}\n\n취소 처리가 완료되었습니다.`,
   }),
+  PASSWORD_RESET: (b) => {
+    if (!b.link) {
+      throw new Error(`link가 없습니다: ${JSON.stringify(b)}`);
+    }
+    return {
+      subject: "[Qket] 비밀번호 재설정 링크",
+      text:
+        `아래 링크를 눌러 비밀번호를 재설정해 주세요. 15분 이내에 클릭해야 합니다.\n\n${b.link}\n\n` +
+        `본인이 요청하지 않았다면 이 메일을 무시하세요.`,
+    };
+  },
 };
 
 export const handler = async (event) => {
