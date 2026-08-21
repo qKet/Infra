@@ -43,8 +43,9 @@ resource "helm_release" "this" {
 #
 # CD 레포가 raw manifest(release/) 구조에서 Helm 차트(helm/) 구조로 바뀌면서 path도 같이 고침 —
 # "release"라는 경로는 이제 CD 레포에 없음(release(backup)/으로 이름이 바뀐 옛날 raw manifest).
-# release 환경은 helm/values.yaml 자체가 이미 release 기준 값(namespace: qket-release 등)을
-# 직접 담고 있어서 valueFiles를 따로 안 줘도 됨 — ArgoCD의 Helm source가 기본으로 values.yaml을 씀.
+# 2026-08-21: CD 레포의 values.yaml → values-release.yaml로 개명(release 값이라는 걸 이름으로
+# 명확히 함, prod용 values-prod.yaml과 대칭) — Helm은 파일명이 정확히 "values.yaml"일 때만
+# 자동으로 읽어서, 개명 후에는 valueFiles로 명시해야 함(안 하면 빈 기본값으로 배포 시도).
 #
 # manifests/qket-cd-application.yaml로 분리 — 변수 치환 없는 순수 YAML이라 file()로 그대로 읽음.
 resource "kubectl_manifest" "qket_cd_app" {
