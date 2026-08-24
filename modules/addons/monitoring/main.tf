@@ -184,12 +184,24 @@ resource "kubernetes_config_map" "grafana_dashboards" {
   }
 
   data = {
-    "qket-monitoring.json" = file("${path.module}/dashboards/qket-monitoring.json")
+    # 2026-08-21: 기존 qket-monitoring.json 하나를 release/prod 두 대시보드로 분리 — 지표
+    # namespace가 하드코딩("qket-release")돼 있어서 원래도 release 전용이었고, prod를 보려면
+    # 그때그때 이 파일을 고쳐야 했음. release 쪽은 RDS/Redis CloudWatch 패널 3개를 제거함
+    # (release는 dev-datastore로 옮겨가서 그 RDS/ElastiCache 자체가 이제 없음 — 대시보드에
+    # 남겨두면 항상 No data).
+    "qket-monitoring-release.json" = file("${path.module}/dashboards/qket-monitoring-release.json")
+    "qket-monitoring-prod.json"    = file("${path.module}/dashboards/qket-monitoring-prod.json")
     # 2026-08-19: 백엔드/프론트(SSR)/브라우저(Faro) 로그를 매번 쿼리 바꿔가며 Explore에서
-    # 찾아보는 대신, 패널 3개로 한 화면에 고정해둔 대시보드. 3번째 패널(브라우저 이벤트)의
-    # 쿼리는 Alloy faro.receiver가 실제로 붙이는 라벨을 아직 확정 못 해서 임시로 텍스트
-    # 필터(|= "qket-frontend")만 걸어둠 — Grafana에서 실제 라벨 확인되면 라벨 매처로 교체 필요.
-    "qket-logs.json" = file("${path.module}/dashboards/qket-logs.json")
+    # 찾아보는 대신, 패널로 한 화면에 고정해둔 대시보드.
+    #
+    # 2026-08-21: qket-monitoring.json과 같은 이유로 release/prod 두 개로 분리 — 단, 3번째
+    # 패널(Browser Events/Faro)은 release/prod로 못 나눔. alloy-faro 컬렉터가 release/prod
+    # 프론트가 보내는 이벤트를 하나의 공유 인스턴스로 받으면서 `job="faro",
+    # service_name="qket-frontend"`라는 고정 라벨만 붙이고 환경 구분 라벨이 없어서
+    # (modules/addons/alloy-faro/main.tf 참고) Loki 단에서 release/prod를 구분할 방법이
+    # 없음 — 그래서 이 패널은 release 대시보드에만 남기고 prod에서는 뺌(사용자 판단).
+    "qket-logs-release.json" = file("${path.module}/dashboards/qket-logs-release.json")
+    "qket-logs-prod.json"    = file("${path.module}/dashboards/qket-logs-prod.json")
   }
 
   depends_on = [helm_release.monitoring]

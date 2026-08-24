@@ -3,7 +3,10 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -20,7 +23,12 @@
   "panels": [
     {
       "datasource": "Loki",
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
       "options": {
         "dedupStrategy": "none",
@@ -44,7 +52,12 @@
     },
     {
       "datasource": "Loki",
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
       "id": 2,
       "options": {
         "dedupStrategy": "none",
@@ -68,7 +81,12 @@
     },
     {
       "datasource": "Loki",
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 18 },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
       "id": 3,
       "options": {
         "dedupStrategy": "none",
@@ -94,9 +112,13 @@
   "preload": false,
   "refresh": "30s",
   "schemaVersion": 42,
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "browser",
-  "title": "qKet - Logs (Backend / Frontend / Browser)",
-  "version": 1
+  "title": "qKet - Logs (release)",
+  "version": 1,
+  "uid": "qket-logs-release"
 }

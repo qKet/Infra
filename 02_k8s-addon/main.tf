@@ -22,6 +22,19 @@ resource "kubernetes_namespace" "qket" {
       name = "qket-${each.key}"
     }
   }
+
+  # depends_on = [module.keda, module.eso_controller] (2026-08-22): 이 네임스페이스 안에는
+  # ArgoCD/04_data가 만든, 각자 자기 컨트롤러의 finalizer가 걸린 CR들이 있음 —
+  # ScaledObject(finalizer.keda.sh, CD Helm 차트가 만듦), SecretStore/ExternalSecret
+  # (external-secrets.io 계열, 04_data의 module.eso가 만듦). Terraform은 이 CR들의 존재를
+  # 전혀 모르지만(다른 root/ArgoCD가 만듦), 이 네임스페이스를 지우려면 그 CR들이 먼저 지워져야
+  # 하고, 그러려면 각 컨트롤러(module.keda, module.eso_controller)가 아직 살아있어야 함.
+  # depends_on 없이는 이 둘이 네임스페이스보다 먼저 destroy될 수도 있어서(실제로 KEDA가
+  # 먼저 지워져서 ScaledObject 2개가 finalizer.keda.sh에 영원히 막혀 namespace가
+  # Terminating으로 멈추는 걸 실제로 겪음 — modules/addons/dev-datastore/aws_eks_addon.ebs_csi와
+  # 완전히 같은 클래스의 버그), 여기서 명시적으로 순서를 강제함(destroy는 역순 —
+  # namespace가 먼저 지워지고 keda/eso_controller는 그다음에 지워짐).
+  depends_on = [module.keda, module.eso_controller]
 }
 
 # ArgoCD 설치 + Application 등록 — modules/addons/argocd로 뽑음.
@@ -68,12 +81,14 @@ module "eso_controller" {
 
 
 
-# Gateway API core CRD + GatewayClass — Ingress의 후속 표준으로 전환하는 작업의 1단계
-# (release 환경 파일럿, 실 트래픽 영향 없음). module.alb_controller보다 반드시 "먼저" 있어야
-# 함(반대 방향 depends_on 없음, 대신 알b_controller 쪽에서 이 모듈을 기다림) — AWS Load Balancer
-# Controller가 부팅 시점에 딱 한 번 이 CRD 존재 여부로 자기 ALBGatewayAPI 기능을 켤지 정하기
-# 때문. 이유/실제 겪은 증상은 modules/addons/gateway-api-crds/main.tf 주석과 CLAUDE_LLM_WIKI
-# decisions/2026-08-2X-ingress-to-gateway-api-migration 참고.
+# Gateway API core CRD — Ingress의 후속 표준으로 전환하는 작업의 1단계. module.alb_controller보다
+# 반드시 "먼저" 있어야 함(반대 방향 depends_on 없음, 대신 alb_controller 쪽에서 이 모듈을 기다림) —
+# AWS Load Balancer Controller가 부팅 시점에 딱 한 번 이 CRD 존재 여부로 자기 ALBGatewayAPI
+# 기능을 켤지 정하기 때문. 이유/실제 겪은 증상은 modules/addons/gateway-api/crds/main.tf 주석과
+# CLAUDE_LLM_WIKI decisions/2026-08-20-ingress-to-gateway-api-migration 참고.
+#
+# 2026-08-22: GatewayClass는 여기 없음 — 아래 kubectl_manifest.gateway_class로 분리됨(이유는
+# 그 리소스 주석 참고).
 module "gateway_api_crds" {
   source = "../modules/addons/gateway-api/crds"
 }
@@ -104,6 +119,32 @@ module "alb_controller" {
   depends_on = [module.gateway_api_crds]
 }
 
+# GatewayClass 싱글턴 — 원래 module.gateway_api_crds의 Helm 차트 안에 같이 있었는데(CRD와 묶어서
+# "생성은 controller보다 먼저"를 보장하려고), 2026-08-22에 여기로 분리함. 이유: GatewayClass는
+# ALB Controller가 자기 전용 finalizer(gateway.k8s.aws/gatewayclass)를 붙이는 오브젝트라, 파괴할
+# 땐 그 반대(GatewayClass가 컨트롤러보다 "먼저" 없어져야 finalizer가 정상 처리됨)가 필요함 — CRD
+# 차트에 같이 있으면 이 둘을 동시에 만족시킬 수 없어서, 실제로 alb_controller가 먼저 destroy된 뒤
+# GatewayClass의 finalizer를 처리해줄 컨트롤러가 없어 `helm_release.gateway_api_crds`의 destroy가
+# 영원히 멈추는 사고를 겪음(CLAUDE_LLM_WIKI troubleshooting/
+# ebs-csi-addon-destroyed-before-dev-datastore-pvc 참고 — 같은 클래스의 문제).
+#
+# depends_on을 CRD 쪽과 반대로(module.alb_controller) 걸면: 생성은 crds→alb_controller→
+# gateway_class 순서(문제없음, GatewayClass는 컨트롤러가 이미 있어야 실제로 쓰이니 오히려 자연스러움),
+# 파괴는 그 역순(gateway_class 먼저, 그다음 alb_controller, 마지막에 crds)이 되어 위 문제가
+# 원천적으로 안 생김.
+resource "kubectl_manifest" "gateway_class" {
+  yaml_body = <<-EOT
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: GatewayClass
+    metadata:
+      name: alb
+    spec:
+      controllerName: gateway.k8s.aws/alb
+  EOT
+
+  depends_on = [module.alb_controller]
+}
+
 # Gateway API — prod 실제 컷오버(Ingress 완전 대체). prod는 아직 실서비스 오픈 전이라(2026-08-20
 # 기준) release와 함께 한 번에 진행했었는데, 같은 날 후속으로 release(dev.jun979.click)는
 # "개발 서버는 관리자만 들어가야 한다"는 결정에 따라 공개 ALB에서 admin Gateway
@@ -129,6 +170,7 @@ module "gateway_api_app" {
   depends_on = [
     module.alb_controller,
     module.gateway_api_crds,
+    kubectl_manifest.gateway_class,
     module.gateway_api_faro,
     module.alloy_faro,
     kubernetes_namespace.qket,
@@ -170,6 +212,7 @@ module "gateway_api_admin" {
   depends_on = [
     module.alb_controller,
     module.gateway_api_crds,
+    kubectl_manifest.gateway_class,
     module.gateway_api_faro,
     module.alloy_faro,
     module.monitoring,
@@ -400,5 +443,14 @@ module "dev_datastore" {
   # 03_registry가 영구 보존
   mysql_root_password = jsondecode(data.aws_secretsmanager_secret_version.dev_mysql_root.secret_string).password
 
-  depends_on = [kubernetes_namespace.qket]
+  # depends_on에 aws_eks_addon.ebs_csi 추가 이유(2026-08-22): 이 모듈의 PV가 CSI 드라이버
+  # "ebs.csi.aws.com"을 문자열로만 참조해서 Terraform이 이 둘 사이에 실제 의존 관계를 전혀
+  # 모르고 있었음 — 그래서 destroy 순서가 정해진 게 없어서, 어느 날 밤 destroy가 하필
+  # ebs_csi addon을 dev_datastore의 PV/PVC보다 먼저 지워버림. CSI 컨트롤러가 이미 사라진
+  # 상태라 PVC/PV가 finalizer(external-attacher/ebs-csi-aws-com 등)를 영원히 못 떼서
+  # `terraform destroy`가 몇 시간이고 "Still destroying..."만 반복하며 멈춤(실제로 겪음,
+  # kubectl로 finalizer 강제 제거해서 겨우 풀었음 — Retain 정책이라 실제 EBS 볼륨은 안전했음).
+  # depends_on을 걸면 destroy는 역순(dev_datastore 먼저, ebs_csi 나중)으로 자동 보장됨 —
+  # create 쪽도 CSI 드라이버가 먼저 준비된 뒤에 PV/파드가 뜨는 게 되어 오히려 더 안전해짐.
+  depends_on = [kubernetes_namespace.qket, aws_eks_addon.ebs_csi]
 }

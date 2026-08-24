@@ -1,3 +1,2 @@
-# GatewayClass는 클러스터에 하나만 있어야 하는 싱글턴 — 이 차트가 유일하게 만드는 곳.
-# modules/addons/gateway-api-pilot의 Gateway는 이 이름을 그대로 참조한다.
-gatewayClassName: alb
+# 2026-08-22: gatewayClassName은 더 이상 이 차트가 안 씀 — GatewayClass는
+# 02_k8s-addon/main.tf의 별도 kubectl_manifest로 분리됐음(destroy 순서 문제 때문, main.tf 주석 참고).
