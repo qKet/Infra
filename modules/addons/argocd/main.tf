@@ -33,7 +33,14 @@ resource "helm_release" "this" {
   #
   # values/notifications.yaml로 분리 — 변수 치환이 전혀 없는 순수 YAML이라 templatefile() 없이
   # file()로 그대로 읽음.
-  values = [file("${path.module}/values/notifications.yaml")]
+  #
+  # values/resources.yaml — 컴포넌트별 최소 CPU/메모리 requests(2026-08-21, 자세한 이유는 그
+  # 파일 상단 주석 참고). 나중에 이 배열에 값이 더 필요해지면 뒤에 이어붙이면 됨(Helm은 여러
+  # values 파일을 리스트 순서대로 병합, 뒤에 오는 파일이 겹치는 키를 덮어씀).
+  values = [
+    file("${path.module}/values/notifications.yaml"),
+    file("${path.module}/values/resources.yaml"),
+  ]
 }
 
 # ArgoCD Application 등록 — 예전엔 Infra/argocd/qket-cd-app.yaml을 사람이 매번 수동으로
