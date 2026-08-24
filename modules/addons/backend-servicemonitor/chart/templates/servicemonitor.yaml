@@ -12,9 +12,12 @@ metadata:
   labels:
     release: monitoring
 spec:
+  # 2026-08-21: qket-prod 추가 — 원래 release만 우선 커버했었는데(대시보드도 release 전용
+  # 하나였음), 대시보드를 release/prod 둘로 나누면서 prod 백엔드도 실제로 스크랩 대상에 넣음.
   namespaceSelector:
     matchNames:
       - qket-release
+      - qket-prod
   selector:
     matchLabels:
       app: qket-backend

@@ -1,8 +1,0 @@
-# "이 종류의 Gateway는 누가 처리하나" — 오늘 Ingress의 ingress_class_name: alb에 해당.
-# 클러스터 전체에 하나만 있으면 되고(싱글턴), release/prod 어느 쪽 Gateway든 이걸 공유해서 참조한다.
-apiVersion: gateway.networking.k8s.io/v1
-kind: GatewayClass
-metadata:
-  name: {{ .Values.gatewayClassName }}
-spec:
-  controllerName: gateway.k8s.aws/alb

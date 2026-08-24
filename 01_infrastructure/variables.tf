@@ -46,21 +46,25 @@ variable "node_instance_types" {
 }
 
 variable "node_desired_size" {
+  # 2026-08-21: 1→2로 상향 — 부트스트랩 노드 1개(t3.large)가 ArgoCD 등 클러스터 제어 컴포넌트
+  # 파드 34개를 혼자 떠안고 있어서 상시 CPU 사용률이 92%까지 찍히는 걸 실측함(Karpenter 노드들
+  # 보다도 더 빡빡했음). min=max=desired 고정값 — 오토스케일링 범위가 아니라 진짜 최소 보장
+  # 개수(elastic scaling은 전부 Karpenter가 전담)라, 여유를 늘리려면 이 숫자 자체를 올려야 함.
   description = "부트스트랩 노드 수"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "node_min_size" {
   description = "부트스트랩 노드 최소"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "node_max_size" {
   description = "부트스트랩 노드 최대 "
   type        = number
-  default     = 1
+  default     = 2
 }
 
 /*******************
