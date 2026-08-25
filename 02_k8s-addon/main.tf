@@ -246,6 +246,21 @@ module "karpenter" {
   depends_on = [module.alb_controller]
 }
 
+# 오버프로비저닝("풍선 파드") — Karpenter의 노드 생성 리드타임 때문에 KEDA 스케일업 순간
+# 파드가 Pending → 노드 생성 → 한 노드에 몰려서 뜨는 문제(CLAUDE_LLM_WIKI troubleshooting/
+# backend-cold-start-cpu-contention-during-rollout 참고)를, "노드를 미리 여유로 예약해둠"으로
+# 해결. prod의 오픈런 트래픽 패턴을 겨냥해 qket-prod에 둠 — preemption 자체는 namespace를
+# 안 가리므로 release가 스케일업할 때도 이 여유를 opportunistic하게 같이 쓸 수 있음(부작용
+# 아니라 덤). 사이징은 실제 노드(kubectl get nodes) t3.large의 allocatable(cpu 1930m,
+# mem ~7080Mi) 실측 기준.
+module "overprovisioning" {
+  source = "../modules/addons/overprovisioning"
+
+  namespace = kubernetes_namespace.qket["prod"].metadata[0].name
+
+  depends_on = [module.karpenter, kubernetes_namespace.qket]
+}
+
 # EBS CSI 드라이버 addon — 원래 01_infrastructure(modules/eks)에 있었는데, 2026-08-21에 여기로
 # 옮김. 이유: 이 addon은 실제로 ACTIVE가 되려면 컨트롤러/데몬셋 파드가 뜰 노드가 있어야 하는데,
 # 01_infrastructure는 관리형 노드그룹이 없어져서(3단계, 노드는 전부 Karpenter가 만듦) 그 시점엔

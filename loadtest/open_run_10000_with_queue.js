@@ -21,7 +21,7 @@ import http from 'k6/http';
 import { sleep, check, group } from 'k6';
 import { Rate } from 'k6/metrics';
 
-const BASE_WEB = __ENV.BASE_WEB || 'https://dev.jun979.click';
+const BASE_WEB = __ENV.BASE_WEB || 'https://app.jun979.click';
 const BASE_API = `${BASE_WEB}/api`;
 
 // 오픈런 대상 회차 — 기본값은 아이유 콘서트 1회차(performance_id=1, round_id=1, data.sql 시드 기준).
