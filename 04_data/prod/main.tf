@@ -12,7 +12,9 @@ locals {
   db_instance_class           = "db.t3.small"
   db_allocated_storage        = 50
   db_max_allocated_storage    = 200
-  multi_az                    = true
+  # 2026-08-24: 팀 프로젝트/학습용이라 대기 인스턴스까지 상시로 띄워둘 필요가 없다고 판단해서
+  # false로 전환(비용 거의 절반) — 실제 운영 서비스라면 true 권장(modules/rds/variables.tf 설명 참고).
+  multi_az                    = false
   skip_final_snapshot         = false
   deletion_protection         = true
   redis_node_type             = "cache.t3.small"

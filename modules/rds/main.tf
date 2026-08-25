@@ -34,6 +34,13 @@ resource "aws_db_instance" "this" {
 
   multi_az = var.multi_az
 
+  # 기본값(false)이면 인스턴스 클래스/Multi-AZ 같은 변경이 다음 유지보수 윈도우까지 미뤄져서
+  # "apply는 성공했는데 실제로는 며칠 뒤에나 반영되는" 혼란이 생김 — release/prod 둘 다 그때그때
+  # 확인하며 바꾸는 프로젝트 특성상 즉시 반영이 맞다고 판단(2026-08-24, Multi-AZ 끄기 작업 계기로 추가).
+  # 참고: engine_version처럼 원래도 즉시 적용되는 값도 있고, storage_type처럼 이 값과 무관하게
+  # 항상 지연 적용되는 값도 있음 — RDS 콘솔에서 "보류 중인 유지관리"로 확인 가능.
+  apply_immediately = true
+
   backup_retention_period = 7
   # release는 자주 destroy/재생성하는 샌드박스라 삭제할 때마다 최종 스냅샷 만들면
   # 이름 충돌로 삭제 자체가 막힘 — 그래서 스냅샷 안 만들고 그냥 삭제되게 함.
