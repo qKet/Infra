@@ -261,6 +261,34 @@ module "overprovisioning" {
   depends_on = [module.karpenter, kubernetes_namespace.qket]
 }
 
+# vpc-cni를 EKS 관리형 addon으로 등록 — NetworkPolicy를 실제로 집행시키기 위함.
+#
+# 배경(2026-08-28 확인): 클러스터엔 vpc-cni(aws-node 데몬셋)가 이미 떠있고 NETWORK_POLICY_
+# ENFORCING_MODE=standard까지 켜져 있어서 "정책을 막는 놈"(aws-eks-nodeagent)은 있는데, K8s
+# NetworkPolicy 오브젝트를 읽어서 그 놈이 이해하는 형태(PolicyEndpoint CR)로 번역해주는
+# 컨트롤러(amazon-network-policy-controller-k8s)가 없어서 실질적으로 아무것도 안 막고 있었음
+# (kubectl get policyendpoints -A → No resources found, curl로 실제 무방비 통과까지 확인).
+# 이 컨트롤러는 vpc-cni addon의 configuration_values로 enableNetworkPolicy를 켜야 같이 설치됨.
+#
+# ⚠️ 이 addon을 적용하기 전에 CD 레포의 NetworkPolicy에 ALB 소스 CIDR(ipBlock)이 먼저 반영돼
+# 있어야 함 — 안 그러면 이 순간부터 ALB→backend 직접 연결(API 요청 8080 + 헬스체크 8081)이
+# 전부 막혀서 즉시 전체 다운으로 이어짐(CLAUDE_LLM_WIKI troubleshooting 참고, 2026-08-28).
+#
+# resolve_conflicts_on_create = OVERWRITE인 이유: vpc-cni가 이미 self-managed로 떠있는 상태라
+# "이미 존재함" 충돌이 나는데, 기존 설치를 그대로 흡수(adopt)해서 관리형으로 전환하기 위함
+# (ebs_csi와 동일한 이유).
+resource "aws_eks_addon" "vpc_cni" {
+  cluster_name = data.terraform_remote_state.infrastructure.outputs.eks_cluster_name
+  addon_name   = "vpc-cni"
+
+  configuration_values = jsonencode({
+    enableNetworkPolicy = "true"
+  })
+
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+}
+
 # EBS CSI 드라이버 addon — 원래 01_infrastructure(modules/eks)에 있었는데, 2026-08-21에 여기로
 # 옮김. 이유: 이 addon은 실제로 ACTIVE가 되려면 컨트롤러/데몬셋 파드가 뜰 노드가 있어야 하는데,
 # 01_infrastructure는 관리형 노드그룹이 없어져서(3단계, 노드는 전부 Karpenter가 만듦) 그 시점엔

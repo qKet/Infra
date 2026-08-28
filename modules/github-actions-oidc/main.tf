@@ -1,6 +1,4 @@
 # GitHub Actions가 고정 AWS 키 없이 OIDC로 인증할 수 있게 하는 IAM 리소스.
-# OIDC Provider는 AWS 계정당 하나만 있으면 되고(모든 레포가 공유), 어느 레포/브랜치가
-# 실제로 assume 가능한지는 각 Role의 trust policy(assume_role_policy)에서 좁힌다.
 data "tls_certificate" "github" {
   url = "https://token.actions.githubusercontent.com/.well-known/openid-configuration"
 }

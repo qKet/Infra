@@ -33,7 +33,7 @@ variable "report_batch_item_failures" {
 }
 
 variable "environment" {
-  description = "release/prod — 04_data workspace 값 그대로 전달받음"
+  description = "release/prod — 04_data 값 그대로 전달받음"
   type        = string
 }
 

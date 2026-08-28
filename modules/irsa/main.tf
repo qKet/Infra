@@ -1,8 +1,4 @@
-# IRSA(서비스어카운트별 IAM Role) 범용 팩토리 — modules/security_group과 같은 for_each 패턴.
-# EKS 클러스터/노드 role(modules/eks), EC2 instance role(modules/ec2)처럼 assume 방식 자체가
-# 다른(서비스 프린시펄 assume, OIDC 아님) 것들은 여기 안 들어감 — 각자 모듈에 그대로 둠.
-# 이 모듈은 sts:AssumeRoleWithWebIdentity + OIDC로 "특정 네임스페이스의 특정 ServiceAccount만"
-# assume 가능한 Role만 다룬다.
+# IRSA(서비스어카운트별 IAM Role) 범용 팩토리 
 data "aws_iam_policy_document" "assume" {
   for_each = var.roles
 
