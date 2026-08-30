@@ -1,19 +1,11 @@
 # 개발용 자체호스팅 MySQL/Redis — RDS/ElastiCache(운영, 04_data)와는 완전히 별개.
-# "앱이 도는지 눈으로 보는" 용도라 비용이 훨씬 저렴한 EBS 기반 StatefulSet으로 대신함.
+# 비용이 저렴한 EBS 기반 StatefulSet으로 대신함(파드 이름과 PVC를 고정 짝지어 재시작해도
+# 같은 데이터로 재접속).
 #
-# StatefulSet을 쓰는 이유: 일반 Deployment는 파드가 재시작될 때마다 새 파드로 취급돼서
-# 볼륨 재연결이 보장되지 않음 — StatefulSet은 파드 이름(mysql-0 등)과 그 파드 전용 PVC를
-# 고정으로 짝지어줘서, 재시작해도 항상 자기 데이터로 다시 붙는 걸 보장함.
-#
-# ⚠️ 볼륨은 "동적 프로비저닝"이 아니라 "정적 프로비저닝"을 씀 — StorageClass로 매번 새
-# EBS 볼륨을 만드는 대신, 03_registry가 미리 만들어둔 영구 볼륨(aws_ebs_volume.dev_mysql/
-# dev_redis)을 PersistentVolume이 volume_handle로 직접 가리킴. 이유: 이 02_k8s-addon 자체는
-# 매일 밤 destroy되는데(EKS 클러스터가 통째로 사라짐), StatefulSet/PVC 같은 쿠버네티스
-# 오브젝트는 그게 어디 정의돼있든 클러스터가 없으면 존재할 수 없음 — 그래서 클러스터와
-# 무관하게 영구히 살아있는 "EBS 볼륨 자체"만 03_registry(순수 AWS 리소스 레이어)에 두고,
-# 매일 새로 뜨는 StatefulSet이 "같은" 볼륨을 다시 붙여서 데이터가 실제로 유지되게 함.
-# (처음엔 StorageClass 동적 프로비저닝을 썼다가, 이러면 매일 새 빈 볼륨만 계속 쌓이고
-# 예전 볼륨은 고아로 남아 비용만 샌다는 걸 확인하고 이 방식으로 변경함.)
+# ⚠️ 정적 프로비저닝을 씀 — 03_registry가 미리 만들어둔 영구 EBS 볼륨을 PV가 volume_handle로
+# 직접 가리킴. 02_k8s-addon(EKS)은 매일 밤 destroy되지만 EBS 볼륨은 03_registry에 남아있어서
+# 다음날 새로 뜨는 StatefulSet이 같은 볼륨을 다시 붙여 데이터가 유지됨(동적 프로비저닝은
+# 매일 새 빈 볼륨만 쌓여서 폐기).
 
 resource "kubernetes_secret" "mysql" {
   metadata {

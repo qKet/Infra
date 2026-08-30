@@ -38,9 +38,8 @@ provider "aws" {
   }
 }
 
-# 01_infrastructure가 만든 EKS 클러스터에 인증 — exec 방식(그때그때 aws eks get-token)이라
-# apply가 오래 걸려도 토큰(유효기간 ~15분) 만료 문제가 없음. 01_infrastructure/providers.tf와
-# 완전히 동일한 패턴, module.eks.xxx 대신 terraform_remote_state로 값을 받아온다는 것만 다름.
+# 01_infrastructure가 만든 EKS 클러스터에 인증 — exec 방식이라 apply가 오래 걸려도 토큰 만료
+# 문제가 없음. 01_infrastructure/providers.tf와 동일 패턴.
 provider "kubernetes" {
   host                   = data.terraform_remote_state.infrastructure.outputs.eks_cluster_endpoint
   cluster_ca_certificate = base64decode(data.terraform_remote_state.infrastructure.outputs.eks_cluster_certificate_authority)
@@ -66,10 +65,8 @@ provider "helm" {
   }
 }
 
-# kubectl_manifest용(ArgoCD Application) — kubernetes_manifest와 달리 plan 시점에 클러스터를
-# 라이브로 조회하지 않아서, ArgoCD 설치(helm_release.argocd가 Application CRD를 등록)와 그 위에
-# Application 오브젝트를 만드는 걸 한 번의 apply로 처리 가능. 04_data가 ESO의 SecretStore/
-# ExternalSecret에 쓰는 것과 완전히 같은 이유 — argocd-apps.tf 참고.
+# kubectl_manifest용(ArgoCD Application) — plan 시점에 클러스터를 라이브로 조회하지 않아서
+# ArgoCD 설치와 Application 오브젝트 생성을 한 번의 apply로 처리 가능(04_data의 ESO와 동일 이유).
 provider "kubectl" {
   host                   = data.terraform_remote_state.infrastructure.outputs.eks_cluster_endpoint
   cluster_ca_certificate = base64decode(data.terraform_remote_state.infrastructure.outputs.eks_cluster_certificate_authority)

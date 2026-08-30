@@ -1,7 +1,5 @@
-# 아래 network 관련 output들은 2026-08-13부터 00_network(영구 root)의 값을 그대로 통과시킴(passthrough).
-# 이름/설명을 그대로 유지하는 이유: 02_k8s-addon/03_registry/04_data가 지금 이 output들을
-# `data.terraform_remote_state.infrastructure.outputs.XXX`로 참조하고 있는데, 이름을 안 바꾸면
-# 그 3개 root는 단 한 줄도 안 고쳐도 됨(출처만 module.vpc/module.subnet → data.terraform_remote_state.network로 바뀜).
+# 아래 network 관련 output들은 00_network(영구 root)의 값을 그대로 통과시킴(passthrough) —
+# 이름을 유지해서 이걸 참조하는 다른 root(02_k8s-addon 등)를 안 고쳐도 되게 함.
 output "vpc_id" {
   description = "생성된 VPC ID"
   value       = data.terraform_remote_state.network.outputs.vpc_id
@@ -124,9 +122,6 @@ output "ssm_bastion_instance_id" {
 
 output "bastion_security_group_id" {
   description = "bastion 보안그룹 ID — data root의 RDS/Redis 보안그룹에서 참조"
-  # 2026-08-13: security_group이 00_network(영구 root)로 옮겨가면서 try() 방어 불필요해짐 —
-  # 예전엔 이 root가 매일 밤 destroy될 때 security_group도 같이 없어져서 존재하지 않는 키
-  # 인덱싱이 하드 에러를 냈었음(2026-08-11 실제로 겪음). 00_network는 절대 안 지우는 root라
-  # 이 값이 없는 상태 자체가 더 이상 존재하지 않음.
+  # security_group이 00_network(영구 root)에 있어서 try() 방어 불필요.
   value = data.terraform_remote_state.network.outputs.security_group_ids["bastion"]
 }

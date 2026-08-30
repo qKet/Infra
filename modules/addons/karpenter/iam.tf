@@ -1,7 +1,6 @@
-# Controller IAM Role(IRSA) + Node IAM Role/Instance Profile
-# cluster-autoscaler를 완전히 대체하는 게 목표라 modules/addons/cluster-autoscaler와 동일한
-# IRSA 패턴을 따름. Node Role은 modules/eks/iam.tf의 aws_iam_role.eks_node와 거의 동일하되,
-# Karpenter가 새로 띄우는 노드는 SSM 세션으로 디버깅할 일이 많아 SSM 정책을 추가로 붙임.
+# Controller IAM Role(IRSA) + Node IAM Role/Instance Profile.
+# Node Role은 modules/eks/iam.tf의 aws_iam_role.eks_node와 거의 동일하되, SSM 정책을 추가로 붙임
+# (Karpenter가 새로 띄우는 노드는 SSH 접근 경로가 없어 SSM 세션으로 디버깅).
 
 data "aws_caller_identity" "current" {}
 
@@ -100,11 +99,8 @@ data "aws_iam_policy_document" "karpenter_controller" {
     resources = [aws_sqs_queue.karpenter_interruption.arn]
   }
 
-  # Karpenter는 EC2NodeClass.spec.role(Node Role 이름)만 주어지면, 매칭되는 Instance Profile이
-  # 없을 경우 자기가 직접 생성/조회/삭제까지 함(2026-08-20 실측: GetInstanceProfile 403으로
-  # NodePool/EC2NodeClass가 계속 Not Ready 상태에 머무름). Node Role의 aws_iam_instance_profile은
-  # modules/eks 기존 노드그룹 방식 그대로 남겨뒀지만, Karpenter는 이걸 쓰지 않고 스스로 동적 생성하는
-  # 구조라 별도로 이 권한이 필요 — AWS 공식 Karpenter controller policy의 표준 항목.
+  # Karpenter는 Node Role 이름만 주어지면 매칭되는 Instance Profile을 스스로 생성/조회/삭제함
+  # (GetInstanceProfile 403 없으면 NodePool/EC2NodeClass가 Not Ready에 머무름).
   statement {
     sid    = "InstanceProfileManage"
     effect = "Allow"
@@ -119,9 +115,7 @@ data "aws_iam_policy_document" "karpenter_controller" {
     resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:instance-profile/*"]
   }
 
-  # iam:ListInstanceProfiles는 AWS IAM 특성상 리소스 레벨 제한을 지원하지 않는 액션이라
-  # resources를 "*"로 둬야 함(2026-08-20 실측: instance-profile/* 로 스코프하니 이 액션만
-  # 별도로 다시 AccessDenied 발생). Karpenter의 오래된 instance profile 정리(가비지 컬렉션)에 사용.
+  # iam:ListInstanceProfiles는 리소스 레벨 제한을 지원 안 해서 resources="*" 필요.
   statement {
     sid       = "InstanceProfileList"
     effect    = "Allow"
@@ -181,10 +175,9 @@ resource "aws_iam_instance_profile" "karpenter_node" {
   role = aws_iam_role.karpenter_node.name
 }
 
-# Karpenter가 만든 노드가 실제로 클러스터에 join하려면 이 Role이 kubelet 권한을 가져야 함 —
-# 레거시 aws-auth ConfigMap 대신, modules/eks/access.tf와 동일하게 Access Entry API 사용.
-# type = EC2_LINUX는 EKS가 자동으로 노드용 최소 권한(kubelet이 API 서버와 통신하는 데 필요한
-# 권한)을 매핑해주는 전용 타입 — cluster_admin처럼 별도 policy association이 필요 없음.
+# Karpenter가 만든 노드가 클러스터에 join하려면 이 Role이 kubelet 권한을 가져야 함 —
+# modules/eks/access.tf와 동일하게 Access Entry API 사용. EC2_LINUX 타입은 EKS가 자동으로
+# 노드용 최소 권한을 매핑해줌.
 resource "aws_eks_access_entry" "karpenter_node" {
   cluster_name  = var.cluster_name
   principal_arn = aws_iam_role.karpenter_node.arn

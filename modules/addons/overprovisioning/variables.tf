@@ -4,13 +4,8 @@ variable "namespace" {
 }
 
 variable "replicas" {
-  # 2026-08-25: 1개(1700m/6500Mi, 노드 하나를 통째로)에서 4개로 쪼갬 — 실제 부하테스트에서
-  # "풍선 하나가 통째로 노드를 차지하고 있으면, 그 노드에 딱 맞는 규모(노드 전체)로 스케일업이
-  # 안 일어나는 한 preemption 자체가 안 걸리고 죽은 공간이 된다"는 게 드러남(round 62 2000명
-  # 재검증, CLAUDE_LLM_WIKI troubleshooting/backend-cold-start-cpu-contention-during-rollout
-  # 참고). 작은 파드 여러 개로 쪼개면 backend 파드 하나(request 500m)가 필요할 때마다 풍선
-  # 하나만 밀어내면 되므로 preemption 단위가 실제 필요 단위에 훨씬 가까워짐 — 같은 노드에
-  # 몰려 떠도(anti-affinity 없음, 비용 동일) 개별 preemption은 그대로 가능.
+  # 풍선 하나가 노드 통째로면 그 규모로 스케일업이 안 일어나는 한 preemption이 안 걸림 —
+  # 작은 파드 여러 개로 쪼개서 preemption 단위를 실제 필요 단위에 맞춤(round 62 부하테스트 검증).
   description = "풍선 파드 개수 — 합쳐서 '여유 노드 1개분'을 유지하되, preemption이 파드 단위로 잘게 일어나도록 여러 개로 쪼갬"
   type        = number
   default     = 4

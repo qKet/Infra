@@ -19,12 +19,9 @@ variable "aws_region" {
 /*******************
 *     외부 API 키 (ESO의 external-api-secrets로 동기화됨)
 *******************/
-# release는 RDS/ElastiCache 자체를 안 씀(dev-datastore로 대체) — db_name/db_username/
-# redis_engine_version은 prod 전용이라 여기(release)엔 없음. 04_data/prod/variables.tf 참고.
-# 사람이 직접 발급받은 값이라 기본값은 빈 문자열 — 실제 값은 TF_VAR_external_api_keys 환경변수나
-# gitignore된 .tfvars로 넘김(절대 이 파일이나 git에 평문으로 안 남게). module.eso 쪽
-# aws_secretsmanager_secret_version.external_api에 ignore_changes가 걸려있어서, 최초 1회만
-# 값을 넣으면 그 뒤로 04_data를 몇 번을 재적용해도(이 변수를 매번 안 넘겨도) 안 바뀜.
+# release는 RDS/ElastiCache를 안 씀(dev-datastore로 대체) — db_name/db_username/
+# redis_engine_version은 prod 전용(04_data/prod/variables.tf 참고).
+# 기본값은 빈 문자열 — 실제 값은 TF_VAR_external_api_keys나 gitignore된 .tfvars로 넘김.
 /*******************
 *     예매 오픈 알림
 *******************/

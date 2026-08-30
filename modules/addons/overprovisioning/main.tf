@@ -1,19 +1,12 @@
 # 오버프로비저닝("풍선 파드") — Karpenter의 노드 생성 리드타임 자체를 없애는 버퍼.
 #
-# 배경: KEDA가 backend/frontend replica를 늘려야 하는 순간, 기존 노드에 여유가 없으면
-# Karpenter가 새 EC2를 프로비저닝하는 동안(수십 초~분 단위) 그 파드들은 Pending으로 대기하고,
-# 노드가 뜨면 한꺼번에 그 노드로 몰려서 뜨며 콜드스타트 CPU 경합을 겪는다
-# (CLAUDE_LLM_WIKI troubleshooting/backend-cold-start-cpu-contention-during-rollout 참고).
-# topologySpreadConstraints로 "몰림"만 막으려 하면 오히려 신규 노드 여러 개를 동시에 기다리느라
-# 스케일업 자체가 늦어지는 더 나쁜 트레이드오프가 났다(같은 문서, 2026-08-21~24 재현) — 즉
-# "몰림 방지"와 "빠른 스케일업"은 스케줄링 정책만으로는 양립이 안 됐다.
+# KEDA 스케일업 순간 노드에 여유가 없으면 Karpenter가 새 EC2를 만드는 동안 파드가 Pending으로
+# 몰려서 콜드스타트 CPU 경합을 겪는다. topologySpreadConstraints만으로 "몰림"을 막으면 신규
+# 노드를 기다리느라 스케일업 자체가 늦어져서, 스케줄링 정책만으론 양립이 안 됐다.
 #
-# 이 모듈은 그 트레이드오프의 원인(노드가 없어서 급하게 기다려야 하는 것) 자체를 없앤다:
-# 아무 일도 안 하는 낮은 우선순위 파드("풍선")를 평소에 띄워서 노드 한 대 분량의 여유를
-# 미리 점유해둔다. 진짜 workload 파드가 스케일업돼야 할 때 K8s 스케줄러가 이 풍선을
-# 즉시 preempt(강제 축출)하므로, 그 자리를 Karpenter의 새 노드를 기다릴 필요 없이 곧바로
-# 쓸 수 있다. 축출된 풍선은 나중에 Karpenter가 새 노드를 마저 만들면 그때 다시 재배치된다
-# (이건 백그라운드에서 느긋하게 진행돼도 무방 — 실제 트래픽을 막는 게 아니므로).
+# 대신 아무 일도 안 하는 낮은 우선순위 파드("풍선")를 평소에 띄워 노드 여유를 미리 점유—
+# 실제 workload가 스케일업될 때 스케줄러가 이 풍선을 즉시 preempt해서 그 자리를 곧바로 쓴다.
+# 축출된 풍선은 Karpenter가 새 노드를 마저 만들면 그때 다시 재배치된다(백그라운드로 진행돼도 무방).
 
 resource "kubernetes_priority_class_v1" "overprovisioning" {
   metadata {
