@@ -28,10 +28,8 @@ resource "aws_iam_role" "cluster_autoscaler" {
   assume_role_policy = data.aws_iam_policy_document.cluster_autoscaler_assume.json
 }
 
-# AWS 공식 가이드가 권장하는 최소 권한 구성 — 읽기 계열은 전체 리소스에, 실제로 노드 수를
-# 바꾸는 쓰기 계열(SetDesiredCapacity 등)은 이 클러스터가 소유한(k8s.io/cluster-autoscaler/
-# <클러스터명>=owned 태그가 붙은) ASG로만 조건부 제한 — 다른 팀 클러스터의 ASG(이 AWS 계정에
-# team1-eks, doro-erp-dev 등 다른 클러스터도 같이 있음, 2026-08-18 확인)를 절대 못 건드리게 함.
+# AWS 공식 가이드 최소 권한 구성 — 쓰기 계열(SetDesiredCapacity 등)은 이 클러스터가 소유한
+# ASG로만 조건부 제한(공유 계정의 다른 팀 ASG를 못 건드리게).
 data "aws_iam_policy_document" "cluster_autoscaler" {
   statement {
     sid    = "Read"

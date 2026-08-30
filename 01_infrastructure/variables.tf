@@ -35,10 +35,8 @@ variable "eks_version" {
 }
 
 
-# 2026-08-21 재도입 — Karpenter/CoreDNS 등이 뜰 최초의 노드가 없으면 데드락에 빠지는 걸
-# 실제로 겪어서, 부트스트랩용 노드 1개(고정)를 다시 둠(modules/eks/eks.tf 상단 주석 참고).
-# desired/min/max를 전부 1로 고정 — 오토스케일링은 이제 karpenter(NodePool)가 전담이라
-# 이 노드그룹은 순수 부트스트랩 floor 역할만 함.
+# Karpenter/CoreDNS 등이 뜰 최초의 노드가 없으면 데드락에 빠져서 부트스트랩용 고정 노드그룹을
+# 둠 — 오토스케일링은 karpenter(NodePool)가 전담, 이 노드그룹은 순수 floor 역할만.
 variable "node_instance_types" {
   description = "부트스트랩 노드그룹 EC2 인스턴스 타입 — kube-system 파드(CoreDNS/Karpenter/ALB Controller/ArgoCD/ExternalDNS/EBS CSI 등)가 동시에 뜰 수 있어야 함(t3.medium은 부족했던 걸 실측함)"
   type        = list(string)
@@ -46,10 +44,8 @@ variable "node_instance_types" {
 }
 
 variable "node_desired_size" {
-  # 2026-08-21: 1→2로 상향 — 부트스트랩 노드 1개(t3.large)가 ArgoCD 등 클러스터 제어 컴포넌트
-  # 파드 34개를 혼자 떠안고 있어서 상시 CPU 사용률이 92%까지 찍히는 걸 실측함(Karpenter 노드들
-  # 보다도 더 빡빡했음). min=max=desired 고정값 — 오토스케일링 범위가 아니라 진짜 최소 보장
-  # 개수(elastic scaling은 전부 Karpenter가 전담)라, 여유를 늘리려면 이 숫자 자체를 올려야 함.
+  # 노드 1개로는 CPU 사용률이 92%까지 찍혀서 2로 상향. min=max=desired 고정값 — 진짜 최소
+  # 보장 개수(elastic scaling은 Karpenter 전담)라, 여유를 늘리려면 이 숫자 자체를 올릴 것.
   description = "부트스트랩 노드 수"
   type        = number
   default     = 2

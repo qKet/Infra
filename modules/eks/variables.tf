@@ -13,11 +13,8 @@ variable "cluster_subnet_ids" {
   type        = list(string)
 }
 
-# 2026-08-21 재도입: Karpenter 컨트롤러 자신도, CoreDNS/EBS CSI 같은 kube-system 파드도
-# "뜰 노드가 하나도 없으면" 영원히 Pending에 멈추는 데드락이 실제로 발생함(관리형 노드그룹을
-# 완전히 없앤 뒤, 완전히 빈 계정에서 처음 apply할 때 재현) — Karpenter가 노드를 만들려면
-# 먼저 Karpenter 자신이 뜰 곳이 있어야 하는데, 그 "최초의 곳"이 없었던 게 원인. 그래서 최소
-# 부트스트랩용 노드 1개(고정, 오토스케일 안 함 — 그 역할은 전부 Karpenter가 전담)를 다시 둠.
+# Karpenter 자신도, CoreDNS/EBS CSI 같은 kube-system 파드도 뜰 노드가 하나도 없으면 영원히
+# Pending에 멈추는 데드락 발생 — 최소 부트스트랩용 노드(고정, 오토스케일은 Karpenter가 전담)를 둠.
 variable "node_subnet_ids" {
   description = "부트스트랩 노드가 배치될 서브넷 (프라이빗-일반)"
   type        = list(string)

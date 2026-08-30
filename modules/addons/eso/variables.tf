@@ -60,12 +60,8 @@ variable "extra_secret_arns" {
   default     = []
 }
 
-# 토스/OAuth 등 외부 API 키 — RDS/Redis 엔드포인트처럼 Terraform이 자동 계산하는 값이 아니라
-# 사람이 외부 서비스(토스 대시보드, 각 provider 개발자 콘솔)에서 직접 발급받은 값이라 변수로 받음.
-# TF_VAR_external_api_keys='{"toss_secret_key":"...",...}' 형태로 넘기거나, 각 필드를
-# TF_VAR_external_api_keys_토스_secret_key 식으로는 못 넘기므로(object 변수라 통째로 넘겨야 함)
-# gitignore된 .tfvars 파일에 담아서 -var-file로 넘기는 걸 권장. 기본값은 전부 빈 문자열이라
-# 값을 안 넘기면 앱에서 그냥 빈 값으로 떨어짐(기존 폴백 동작 그대로 — 신규 기능 끊김 없음).
+# 토스/OAuth 등 외부 API 키 — 사람이 외부 서비스에서 직접 발급받은 값이라 변수로 받음.
+# object 변수라 필드별로 못 넘기므로 gitignore된 .tfvars 파일에 담아 -var-file로 넘길 것.
 variable "external_api_keys" {
   description = "토스/OAuth 등 외부 API 키 — 사람이 직접 발급받은 값"
   type = object({

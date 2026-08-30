@@ -1,9 +1,5 @@
-# release 전용 root. 2026-08-21에 04_data(단일 root + workspace)에서 분리됨 — release는
-# RDS/ElastiCache 대신 02_k8s-addon의 dev-datastore(StatefulSet MySQL/Redis)를 쓰게 되면서
-# prod와 구조 자체가 달라졌고(모듈 유무 자체가 다름), workspace + count/삼항식으로 억지로
-# 한 파일에 합쳐두는 것보다 디렉토리를 나누는 게 더 읽기 쉽다고 판단해서 분리함.
-# 그래서 prod에 있는 module.rds/module.redis/module.security_group이 여기엔 아예 없음
-# (count=0으로 숨겨두는 게 아니라 애초에 이 환경에 그 개념 자체가 없음).
+# release 전용 root. RDS/ElastiCache 대신 dev-datastore(StatefulSet)를 쓰므로
+# prod에 있는 module.rds/redis/security_group이 여기엔 없음(count=0이 아니라 애초에 불필요).
 locals {
   environment                 = "release"
   secret_recovery_window_days = 0
@@ -11,8 +7,9 @@ locals {
 
 /*
   [S3 Bucket]
-  이름        : team5-posters-release
-  namespace  : qket-release
+  이름        :  team5-posters-release
+  namespace  :  qket-release
+  설명        :  포스터 이미지 업로드용 — force_destroy=false(포스터 원본이 남은 채 실수로 destroy되는 걸 막음)
 */
 module "storage" {
   source = "../../modules/storage"
@@ -52,13 +49,12 @@ resource "kubernetes_config_map" "app_config" {
   }
 }
 
-# DB_HOST/REDIS_HOST는 고정값이라 위 ConfigMap(app-config)에 직접 넣었고, 비밀번호도 안 바뀌니
-# ESO 로테이션 동기화가 필요 없음 — db-secrets는 아래에서 plain kubernetes_secret로 직접 생성.
 /*
   [Secret Manager]
   이름        :  db-secrets
   namespace  :  qket-release
-  설명        :  
+  설명        :  DB_HOST/REDIS_HOST는 고정값이라 위 ConfigMap(app-config)에 직접 넣었고 비밀번호도
+                안 바뀌니 ESO 로테이션 동기화가 필요 없음 — db-secrets는 아래 plain kubernetes_secret로 직접 생성
 */
 module "eso" {
   source = "../../modules/addons/eso"
@@ -101,9 +97,12 @@ resource "kubernetes_secret" "db_secrets" {
   }
 }
 
-# 예매 오픈 알림 — 백엔드의 @Scheduled 스위퍼가 5분마다 publish, Lambda가 consume. release/prod
-# 각자 큐/함수를 가짐(운영 트래픽이 개발/스테이징 알림과 섞이면 안 되므로). SES 도메인 인증 자체는
-# 03_registry에 있음(도메인당 한 번만 해야 해서 — modules/lambda/main.tf 주석 참고).
+/*
+  [SQS + Lambda]
+  이름        :  team5-qket-open-alert-release / team5-qket-open-alert-mailer-release
+  설명        :  예매 오픈 알림 — 백엔드 @Scheduled 스위퍼가 5분마다 publish, Lambda가 consume.
+                release/prod 각자 큐/함수를 가짐(개발/운영 알림 분리)
+*/
 module "open_alert_queue" {
   source = "../../modules/sqs"
 
@@ -127,13 +126,12 @@ module "open_alert_mailer" {
   from_email = var.open_alert_from_email
 }
 
-# 알림 발송 파이프라인 — 회원가입 이메일 인증 + 예매확정/취소 알림을 모두 여기 큐 하나로 처리.
-# SQS(backend가 요청 넣음, type 필드로 종류 구분) → Lambda(type 보고 분기해서 SES로 발송).
-# open_alert_queue/mailer와 같은 범용 모듈(modules/sqs, modules/lambda)을 재사용 — 예전엔
-# 전용 모듈(modules/messaging)로 따로 있었으나 리소스는 여전히 분리 유지(큐/함수 각 2개).
-# timeout/batch_size/report_batch_item_failures를 명시하는 이유: modules/lambda 기본값(batch 10,
-# ReportBatchItemFailures on)은 open-alert-mailer 기준이고, 이 Lambda는 기존 동작(batch 1, 부분배치
-# 실패응답 미지원)을 그대로 유지해야 해서 다르게 지정함. runtime은 둘 다 기본값(nodejs22.x)을 그대로 씀.
+/*
+  [SQS + Lambda]
+  이름        :  team5-qket-email-verification-release
+  설명        :  회원가입 이메일 인증 + 예매확정/취소 알림을 큐 하나로 처리 — SQS(backend가
+                type 필드로 종류 구분해 요청 넣음) → Lambda(type 보고 분기해서 SES 발송)
+*/
 module "notification_queue" {
   source = "../../modules/sqs"
 

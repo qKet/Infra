@@ -22,12 +22,8 @@ resource "helm_release" "external_dns" {
     value = var.domain_filter
   }
 
-  # Gateway API 마이그레이션 1단계(release 파일럿) 대응 — 차트 기본값은 sources: [service, ingress]뿐이라
-  # HTTPRoute를 아예 감시 안 함. gateway-httproute를 추가해야 Gateway API의 Gateway/HTTPRoute
-  # hostname을 보고도 Route53 레코드를 만들어줌(기존 service/ingress 감시는 그대로 유지, 순수 추가).
-  # 주의: 이 sources가 켜진 채로 Gateway API CRD가 클러스터에 없으면 external-dns 파드가
-  # 시작 시 해당 kind를 못 찾아 크래시루프 날 수 있음 — module.gateway_api_crds가 먼저 설치돼
-  # 있어야 하므로, 이 모듈을 부르는 02_k8s-addon/main.tf에서 depends_on으로 순서를 강제한다.
+  # gateway-httproute 추가 — 차트 기본값(service/ingress)은 HTTPRoute를 감시 안 해서 Gateway
+  # API hostname 기준 레코드가 안 만들어짐. CRD가 없으면 크래시루프 나므로 호출부에서 depends_on 필요.
   set {
     name  = "sources[0]"
     value = "service"

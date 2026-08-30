@@ -29,10 +29,8 @@ resource "aws_iam_role" "external_dns" {
   assume_role_policy = data.aws_iam_policy_document.external_dns_assume.json
 }
 
-# 공유 AWS 계정이라(다른 팀들 도메인도 같은 계정에 있음) ChangeResourceRecordSets는
-# 우리 zone(var.hosted_zone_id) 하나로만 정확히 좁힘 — 다른 팀 도메인 레코드를 실수로도
-# 못 건드리게. List* 계열은 Route53 자체가 리소스 단위 스코프를 지원 안 해서 "*"로 둠
-# (조회만 가능, 아무것도 못 바꿈 — ExternalDNS가 기존 레코드 목록을 알아야 sync 가능하므로 필요).
+# 공유 AWS 계정이라 ChangeResourceRecordSets는 우리 zone 하나로만 좁힘. List*는 Route53이
+# 리소스 단위 스코프를 지원 안 해서 "*"(조회만 가능).
 data "aws_iam_policy_document" "external_dns" {
   statement {
     effect    = "Allow"

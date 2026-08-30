@@ -1,17 +1,10 @@
 # ── ESO가 실제로 뭘 어디서 어디로 동기화할지 정의 (SecretStore + ExternalSecret) ──
-# kubectl_manifest는 kubernetes_manifest와 달리 plan 시점에 클러스터를 라이브 조회하지 않아서,
-# 클러스터 생성 + helm_release(ESO 설치) + 이 CRD 리소스들을 전부 한 번의 apply로 처리할 수 있음.
+# kubectl_manifest는 kubernetes_manifest와 달리 plan 시점에 클러스터를 라이브 조회하지 않아서
+# CRD가 아직 없어도 apply 가능. yaml_body는 manifests/*.yaml.tpl + templatefile()로 분리 —
+# YAML 문법 그대로 관리하고 변수만 ${...}로 주입.
 #
-# 2026-08-21: yaml_body를 HCL 객체(yamlencode)로 직접 쓰지 않고 manifests/*.yaml.tpl 파일 +
-# templatefile()로 분리함 — 매니페스트가 늘어날수록 "이 HCL 키가 실제로 어떤 YAML 필드가 되는지"
-# 눈으로 매핑해야 하는 부담이 커져서, 진짜 YAML 문법 그대로 파일로 관리하고 변수만 ${...}로 주입.
-# 리팩터링 전후로 terraform plan에 diff가 없는지(렌더링 결과가 기존 yamlencode와 동일한지) 확인함.
-
-# 2026-08-21: ESO 컨트롤러(helm_release)가 02_k8s-addon(다른 root)으로 옮겨가면서 여기엔 더 이상
-# 그 리소스가 없음 — depends_on을 걸 대상이 같은 root에 없다는 뜻. kubectl_manifest는
-# kubernetes_manifest와 달리 plan 시점에 CRD 존재를 확인하지 않아서(main.tf 옛 주석 참고,
-# 지금은 삭제됨) 문제가 없고, apply 순서는 확립된 root 순서(infrastructure→k8s-addon→data)가
-# 그대로 보장해줌 — 02_k8s-addon이 항상 먼저 apply되므로 이 시점엔 컨트롤러가 이미 떠 있음.
+# ESO 컨트롤러는 02_k8s-addon(다른 root)에 있어서 같은 root에 depends_on 대상이 없음 — root
+# 순서(infrastructure→k8s-addon→data)가 apply 순서를 보장해줌.
 resource "kubectl_manifest" "secret_store" {
   yaml_body = templatefile("${path.module}/manifests/secret-store.yaml.tpl", {
     namespace  = var.namespace
@@ -34,12 +27,9 @@ resource "kubectl_manifest" "external_secret_db" {
   depends_on = [kubectl_manifest.secret_store]
 }
 
-# 2026-08-11: 토스/OAuth 외부 API 키 — db-secrets/redis-secrets랑 같은 패턴이지만 원본이
-# aws_secretsmanager_secret.external_api(사람이 직접 발급받은 값, ignore_changes로 보호됨).
-# 키 목록을 local로 뽑은 이유: application.yml이 기대하는 이름(TOSS_SECRET_KEY,
-# GOOGLE_CLIENT_ID 등)과 Secrets Manager 쪽 JSON 키가 1:1로 같아서, 하나씩 나열하는 대신
-# 리스트 하나로 관리 — 나중에 새 provider 추가할 때 이 리스트에 한 줄만 추가하면 됨
-# (템플릿 쪽 %{ for }도 자동으로 그만큼 늘어남).
+# 토스/OAuth 외부 API 키 — db-secrets/redis-secrets랑 같은 패턴이지만 원본이 사람이 직접
+# 발급받은 값(ignore_changes로 보호됨). application.yml이 기대하는 이름과 1:1로 같아서
+# 리스트 하나로 관리 — 새 provider 추가 시 이 리스트에 한 줄만 추가하면 됨.
 locals {
   external_api_keys_list = [
     "TOSS_SECRET_KEY",

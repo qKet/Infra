@@ -21,11 +21,9 @@ resource "aws_eks_cluster" "this" {
   depends_on = [aws_iam_role_policy_attachment.eks_cluster]
 }
 
-# 부트스트랩용 관리형 노드그룹 — 2026-08-20 Karpenter 마이그레이션 3단계로 완전히 제거했다가,
-# 2026-08-21 최소 1개(고정)로 재도입함(variables.tf 상단 주석 참고). Karpenter/CoreDNS 등
-# kube-system 파드가 뜰 최초의 노드가 없으면 클러스터 전체가 데드락에 빠지는 걸 실제로 겪음.
-# 이후 실제 워크로드 스케일링은 전부 Karpenter(02_k8s-addon/module.karpenter)가 전담 — 이
-# 노드그룹은 desired/min/max를 전부 1로 고정해서 순수 부트스트랩 floor로만 씀.
+# 부트스트랩용 관리형 노드그룹 — Karpenter/CoreDNS 등 kube-system 파드가 뜰 최초의 노드가
+# 없으면 클러스터 전체가 데드락에 빠짐. 실제 워크로드 스케일링은 Karpenter가 전담, 이
+# 노드그룹은 고정값으로 순수 부트스트랩 floor 역할만.
 resource "aws_eks_node_group" "this" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "${var.project_name}-node-group"
